@@ -1,0 +1,41 @@
+{
+  "name": "please-hold",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PLEASE HOLD - a first-person narrative horror game set in the overnight dispatch office of a 1999 electric utility",
+  "scripts": {
+    "start": "node serve.cjs",
+    "dev": "node serve.cjs",
+    "check": "node tools/check.mjs",
+    "shots": "node tools/shots.mjs",
+    "app": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "electron/main.js",
+  "productName": "Please Hold",
+  "author": "EM Software Innovators",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "playwright-core": "^1.62.1"
+  },
+  "build": {
+    "appId": "com.emsoftwareinnovators.pleasehold",
+    "productName": "Please Hold",
+    "copyright": "(c) 2026 EM Software Innovators",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["index.html", "src/**/*", "electron/**/*", "package.json", "!**/{.DS_Store,.git,.github,node_modules}"],
+    "asar": true,
+    "win": { "target": [{ "target": "zip", "arch": ["x64"] }, { "target": "nsis", "arch": ["x64"] }], "artifactName": "please-hold-${version}-windows-${arch}.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "shortcutName": "Please Hold" },
+    "mac": { "target": [{ "target": "zip", "arch": ["x64", "arm64"] }], "category": "public.app-category.games", "artifactName": "please-hold-${version}-macos-${arch}.${ext}" },
+    "linux": { "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "tar.gz", "arch": ["x64"] }], "category": "Game", "artifactName": "please-hold-${version}-linux-${arch}.${ext}" }
+  }
+}

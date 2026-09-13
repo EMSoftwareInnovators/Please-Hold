@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>PLEASE HOLD</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<div id="cabinet">
+  <canvas id="screen"></canvas>
+
+  <!-- ============ LOADING ============ -->
+  <div id="loading" class="layer">
+    <div class="load-wrap">
+      <div class="load-title">PLEASE HOLD</div>
+      <div class="load-bar"><i id="load-fill"></i></div>
+      <div class="load-note" id="load-note">generating materials</div>
+    </div>
+  </div>
+
+  <!-- ============ HUD ============ -->
+  <div id="hud" class="layer hidden">
+    <div id="reticle"></div>
+    <div id="prompt"></div>
+
+    <div id="clock">
+      <span id="clock-time">10:45 PM</span>
+      <span id="clock-date">NOV 11 1999</span>
+    </div>
+
+    <!-- the six line appearances, mirrored from the telephone -->
+    <div id="lines">
+      <div class="lines-hdr">LINES</div>
+      <ul id="line-list"></ul>
+    </div>
+
+    <div id="radio-strip"><span id="radio-from"></span><span id="radio-text"></span></div>
+    <div id="toasts"></div>
+    <div id="objective"></div>
+  </div>
+
+  <!-- ============ CALL PANEL ============ -->
+  <div id="call" class="layer hidden">
+    <div id="call-head">
+      <span id="call-who">CALLER</span>
+      <span id="call-meta"></span>
+    </div>
+    <div id="call-body">
+      <p id="call-stage"></p>
+      <p id="call-text"></p>
+    </div>
+    <ul id="call-choices"></ul>
+    <div id="call-keys">
+      <span><b>1-4</b> reply</span>
+      <span><b>H</b> hold</span>
+      <span><b>X</b> hang up</span>
+      <span><b>T</b> terminal</span>
+    </div>
+  </div>
+
+  <!-- ============ TERMINAL (full screen read) ============ -->
+  <div id="crt" class="layer hidden">
+    <div id="crt-frame">
+      <canvas id="crt-canvas" width="720" height="540"></canvas>
+      <div id="crt-glass"></div>
+    </div>
+    <p id="crt-hint">F1-F6 screens &middot; ESC back &middot; TAB / arrows &middot; <b>T</b> to step back from the terminal</p>
+  </div>
+
+  <!-- ============ TITLE / MENU ============ -->
+  <div id="title" class="layer">
+    <div class="title-wrap">
+      <div class="title-logo"><span>PLEASE HOLD</span></div>
+      <p class="tag">WRIGHT COUNTY POWER &amp; LIGHT &middot; DISTRICT OPERATIONS &middot; NOV 1999</p>
+      <ul id="title-menu">
+        <li data-act="start" class="sel">START THE SHIFT<span class="sub">22:45. You are the only one here.</span></li>
+        <li data-act="continue">CONTINUE<span class="sub">resume the last checkpoint</span></li>
+        <li data-act="howto">HOW TO WORK THE DESK</li>
+        <li data-act="options">OPTIONS</li>
+      </ul>
+      <p class="hint">arrows / mouse &middot; ENTER to select</p>
+    </div>
+    <p class="copyright">&copy; 2026 EM Software Innovators</p>
+  </div>
+
+  <!-- ============ PANEL (howto / options / pause / end) ============ -->
+  <div id="panel" class="layer hidden"><div class="pad" id="panel-body"></div></div>
+
+  <div id="fade" class="layer"></div>
+  <div id="letterbox-top"></div>
+  <div id="letterbox-bot"></div>
+  <div id="slate" class="layer hidden"><span id="slate-text"></span></div>
+</div>
+<div id="rotate">TURN DEVICE / USE A LARGER SCREEN</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

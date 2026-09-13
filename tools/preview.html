@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- Dev-only harness: builds the office shell and lighting with no game
+     systems attached, so the renderer and the materials can be eyeballed
+     in isolation. Not shipped; see tools/preview.mjs. -->
+<html><head><meta charset="utf-8"><title>preview</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#wrap{width:100vw;height:100vh}canvas{display:block;width:100%;height:100%}</style>
+</head><body>
+<div id="wrap"><canvas id="screen"></canvas></div>
+<script type="module">
+import * as THREE from '../src/vendor/three.module.js';
+import { Renderer } from '../src/engine/renderer.js';
+import { MaterialLibrary } from '../src/engine/materials.js';
+import { Office } from '../src/world/office.js';
+import { Lighting } from '../src/world/lighting.js';
+import { dressBuilding } from '../src/world/dress.js';
+import { Rain, WetGlass, StormSky, buildExterior } from '../src/world/weather.js';
+import { SPAWN } from '../src/world/plan.js';
+
+const boot = async () => {
+  const r = new Renderer(document.getElementById('screen'));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05070a);
+  const mats = new MaterialLibrary(r.gl);
+  await mats.warm();
+  const office = new Office(scene, mats).build();
+  const dressing = dressBuilding(scene, mats, office);
+  buildExterior(scene, mats);
+  const sky = new StormSky(scene);
+  const rain = new Rain(scene, { x: 26, y: 0, z: 6, w: 62, h: 22, d: 62 }, 1800);
+  const glass = new WetGlass().applyTo(scene);
+  const lighting = new Lighting(scene, mats, office).build();
+  lighting.update(0, 0.016);
+  r.captureEnvironment(scene, new THREE.Vector3(5, 1.6, 3));
+  window.__preview = { r, scene, mats, office, lighting, dressing, rain, glass, sky, THREE };
+  const cam = r.camera;
+  cam.position.set(SPAWN.x, 1.68, SPAWN.z);
+  cam.rotation.order = 'YXZ';
+  cam.rotation.y = SPAWN.yaw;
+  let t = 0;
+  const loop = () => {
+    t += 0.016;
+    lighting.update(t, 0.016);
+    rain.update(t);
+    glass.update(t, lighting.lightningFlash || 0);
+    sky.update(t, lighting.lightningFlash || 0);
+    r.resize();
+    r.render(scene, t);
+    requestAnimationFrame(loop);
+  };
+  loop();
+  window.__ready = true;
+};
+boot().catch((e) => { window.__error = String(e && e.stack || e); console.error(e); });
+</script></body></html>
