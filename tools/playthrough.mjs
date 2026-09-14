@@ -79,6 +79,45 @@ const pump = async (seconds) => {
       const d = window.__drive;
       if (g.gameState.has('slice_complete')) return true;
 
+      /* The shift now opens with the handover call, which teaches by
+         WAITING: each gate holds until the player actually does the thing.
+         A harness has to do those things too, or it stalls on gate one and
+         reports the game as broken. */
+      if (g.runner.blocked) {
+        const st = g.gameState;
+        if (!st.has('sat_down')) { g.interaction.handlers.get('seat')(); return false; }
+        if (!st.has('used_terminal')) { g.focusTerminal(true); g.focusTerminal(false); return false; }
+        if (g.database.lookups.size === 0) {
+          g.database.search('PRZ');
+          g.database.markLookedUp('WH-40877');
+          d.log.push('looked up WH-40877 (tutorial)');
+          return false;
+        }
+        if (!st.has('created_a_ticket')) {
+          g.terminal.go('OUTG');
+          g.terminal.newTicket({ address: 'CO RD 18', town: 'MARROW HILL', feeder: 'MH-14', id: null });
+          g.terminal.draft.cause = 'TREE ON LINE';
+          g.terminal.commitTicket();
+          d.log.push('opened the tutorial ticket');
+          return false;
+        }
+        if (g.crews.dispatchedCount() === 0) {
+          const t = g.outages.unassigned()[0];
+          if (t) {
+            const rec = g.dispatcher.recommend(t.id).find((r) => r.free && r.qualified);
+            if (rec) { g.dispatcher.send(rec.crew.id, t.id); d.log.push(`dispatched ${rec.crew.id} (tutorial)`); }
+          }
+          return false;
+        }
+        if (!st.has('used_hold')) {
+          g.phone.hold();
+          if (g.phone.held.length) g.phone.resume(g.phone.held[0].index);
+          d.holdsDone++;
+          return false;
+        }
+        return false;
+      }
+
       // Come back to anyone parked before taking a new call. A player
       // triages; a harness that only ever answers new rings will starve the
       // conversation it parked and then report the game as broken.
@@ -213,7 +252,7 @@ const searchInfo = await page.evaluate(() => ({
   results: window.__game.terminal.results.map((r) => r.id),
 }));
 check('terminal account search finds a record', searchInfo.results.includes('WH-40122'), JSON.stringify(searchInfo));
-await page.keyboard.press(' ');
+await page.keyboard.press('Enter');
 await page.waitForTimeout(150);
 check('opening a record marks it looked up', await page.evaluate(() => window.__game.database.wasLookedUp('WH-40122')));
 
@@ -223,11 +262,31 @@ check('terminal renders the service area map', (await page.evaluate(() => window
 
 await page.keyboard.press('F3');
 await page.keyboard.press('n');
-await page.waitForTimeout(120);
+await page.waitForTimeout(150);
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('Enter');
-await page.waitForTimeout(200);
+await page.waitForTimeout(250);
 check('terminal can open a new trouble ticket', (await page.evaluate(() => window.__game.outages.list.length)) > 0);
+
+// The terminal has to be readable and usable, not a stretched bitmap.
+// Wait for the DOM view to catch up -- it renders on the frame loop, and
+// this harness runs at a few frames a second.
+await page.waitForFunction(() => document.querySelectorAll('#crt-body [data-id]').length > 0,
+  null, { timeout: 20000 }).catch(() => {});
+const termUi = await page.evaluate(() => {
+  const screen = document.getElementById('crt-screen');
+  const crt = document.getElementById('crt');
+  return {
+    fontPx: parseFloat(getComputedStyle(screen).fontSize),
+    opaque: getComputedStyle(crt).backgroundColor,
+    tabs: document.querySelectorAll('#crt-tabs button').length,
+    rows: document.querySelectorAll('#crt-body [data-id]').length,
+    hudHidden: document.getElementById('hud').classList.contains('hidden'),
+  };
+});
+check('terminal text is legible', termUi.fontPx >= 18, `${termUi.fontPx}px`);
+check('terminal is an opaque takeover', !/, *0?\.\d+\)/.test(termUi.opaque), termUi.opaque);
+check('terminal rows are clickable', termUi.rows > 0 && termUi.tabs === 6, JSON.stringify(termUi));
 await page.evaluate(() => window.__game.focusTerminal(false));
 
 /* ---- where is the first call before we hand over to the pump? ---- */
@@ -260,6 +319,7 @@ const out = await page.evaluate(() => {
     hangups: d.hangups,
     choicesTaken: d.choicesTaken,
     nodesSeen: d.seen.size,
+    holdsDone: d.holdsDone,
     dispatches: g.gameState.count('dispatches'),
     tickets: g.outages.list.length,
     restored: g.outages.restored.length,
@@ -285,6 +345,8 @@ const out = await page.evaluate(() => {
       saidTheLine: flags.includes('said_the_line'),
       thePause: flags.includes('the_pause_happened'),
       holbrook: flags.includes('holbrook_done'),
+      usedHold: flags.includes('used_hold'),
+      tutorialDone: flags.includes('tutorial_done'),
     },
   };
 });
@@ -297,6 +359,8 @@ check('the whole beat chain completed', out.keyFlags.sliceComplete, `beat ${out.
 check('a recurring caller called back', out.daleyCalls >= 2, `Daley calls: ${out.daleyCalls}`);
 check('a crew was dispatched over the radio', out.dispatches >= 1);
 check('an outage was restored by a crew', out.restored >= 1);
+check('the handover ran first', out.completed[0] === 'tutorial_01', out.completed.slice(0, 2).join(', '));
+check('the tutorial taught hold', out.holdsDone >= 1 || out.keyFlags.usedHold);
 check('the crew radio sequence ran', out.completed.includes('crew_bethel'));
 check('the suspicious call ran', out.keyFlags.holbrook);
 check('the EVP call delivered its warning', out.keyFlags.evpWarning);

@@ -114,7 +114,40 @@ target and frame rate at each preset. **The frame rate is meaningless** — it i
 SwiftShader in a container — but the light count and the draw calls are not.
 In game, **F3** shows the same numbers live.
 
-## 3. Dialogue is data. Always.
+## 3. The terminal has two renderers, and neither is a stretched bitmap
+
+`ui/terminal.js` is a state machine that produces a `describe()` — a title, a
+list of rows, and the keys that are live on this screen. Two things render it:
+
+* **the tube** (`drawTube`) — a coarse canvas used as the emissive texture on
+  the monitor in the 3D scene, so the CRT lights the room. Nobody reads it.
+* **the view** (`ui/terminalview.js`) — real DOM, shown when the player leans
+  in. This is what is actually read.
+
+Because both come from the same description they cannot disagree. **Add new
+kinds of screen content as row kinds, not as one-off drawing code.**
+
+Three rules that came out of the first version being unusable:
+
+1. **Size the UI in `cqw`, against `#cabinet`.** The first terminal drew an
+   80-column character grid into a 720x540 canvas and stretched it over the
+   screen: nine-pixel cells, upscaled and blurry. Text must scale with the
+   window.
+2. **A takeover is opaque.** The first overlay was 90% opaque over a live 3D
+   room, so the storm kept moving behind the text and players read it as the
+   camera drifting while they were trying to work.
+3. **Column widths belong to the screen, not the stylesheet.** `COLS` in
+   terminal.js is shared between a header row and its item rows so they can
+   never drift apart.
+
+While the terminal is focused the player is locked: no look, no movement. The
+HUD is hidden, so anything urgent — a ringing line — must be surfaced in the
+terminal's own status bar, or it is invisible.
+
+**F1–F6 belong to the terminal.** The perf overlay also lives on F3; it is
+suppressed while the terminal is up for exactly that reason.
+
+## 4. Dialogue is data. Always.
 
 Every conversation in this game is a plain object in `src/data/calls/`. Nothing
 in `src/game/` knows the name of a single character.
@@ -137,6 +170,29 @@ Run `node tools/calls.mjs` after any dialogue change. It validates the graph,
 every `goto`, every op name, every horror event name, every scheduled call id,
 and flags unreachable nodes.
 
+### Teaching by waiting
+
+A node with a `waitFor` block holds the conversation until the player has
+actually done something:
+
+```js
+wait_ticket: {
+  speaker: 'caller',
+  waitFor: { flags: ['created_a_ticket'] },
+  hint: 'OPEN A TROUBLE TICKET -- F3, then N, choose a cause, then RETURN',
+  next: 'ticket_done',
+}
+```
+
+`waitFor` takes the same keys as a choice's `requires` (see `meets()`), so it
+can wait on a lookup, an open ticket, a dispatched crew, a flag or a counter.
+`hint` goes on screen as the objective until the gate opens. This is how the
+handover call teaches, and any later call can use it to wait on real work.
+
+A `waitFor` node **must** have a `next` and must not have `choices`; the
+validator enforces both, because a gate with no exit strands the player with an
+instruction and no way out.
+
 ### The loop trap
 
 A reply that returns to the node it came from (`"let me check that"`,
@@ -144,7 +200,7 @@ A reply that returns to the node it came from (`"let me check that"`,
 least one reply that always progresses. Every call in the repo was written with
 this bug at least once; `tools/soak.mjs` catches it.
 
-## 4. Horror is escalation, not jumpscares
+## 5. Horror is escalation, not jumpscares
 
 `src/game/horror.js` is organised in tiers and they must stay that way:
 
@@ -167,7 +223,7 @@ time, and calls from other decades.
 **Adding an event:** one entry in `HORROR` in `src/game/horror.js`, with
 `start`/`update`/`end`. Then fire it from data: `{ op: 'horror', event: 'name' }`.
 
-## 5. Ordinary calls are load-bearing
+## 6. Ordinary calls are load-bearing
 
 Do not cut the mundane conversations to make room for more scares. They are what
 the scares are measured against. A shift that is all anomaly is a shift with no
@@ -181,7 +237,7 @@ The director enforces this rhythm with `mundaneDebt` — a strange call raises i
 and ordinary calls pay it down, so supernatural calls always land against a
 floor of real work. Do not remove that mechanism; tune the numbers if needed.
 
-## 6. Architecture
+## 7. Architecture
 
 Systems own their own rules. `src/game/game.js` wires them together and owns
 nothing. **If a feature can only be added by editing `game.js`, it has probably
@@ -204,7 +260,7 @@ been designed wrong.**
 * Map coordinates are in **map units** (roughly km), +X east, +Y north.
 * World coordinates are in **meters**, +X east, +Z south, +Y up.
 
-## 7. Testing
+## 8. Testing
 
 **Do not assume code works because it looks correct.** Four harnesses exist and
 all of them have caught real bugs:
@@ -216,6 +272,7 @@ all of them have caught real bugs:
 | `node tools/soak.mjs` | runs **every call script to completion on three different reply strategies** — this is what catches dead ends and infinite loops |
 | `node tools/playthrough.mjs` | drives a whole shift with real key events and asserts 23 things about the result |
 | `node tools/audio.mjs` | taps the audio buses and measures RMS, spectral balance and voice-chain leaks |
+| `node tools/tutorial.mjs` | plays the handover call and asserts every `waitFor` gate opens on the right action |
 | `node tools/perf.mjs` | lights, draw calls and render target at each quality preset |
 | `npm run check` | all of the above except perf and shots |
 | `npm run shots` | captures the game at 20 moments, so visual regressions are visible |
@@ -227,7 +284,7 @@ game, instrument before you "fix" anything.
 
 Never make a test pass by weakening the assertion.
 
-## 8. Code style
+## 9. Code style
 
 Match the surrounding code.
 
@@ -239,7 +296,7 @@ Match the surrounding code.
   genuinely deferred it goes in `ROADMAP.md`, not in a comment.
 * Keep `src/vendor/` unmodified. If three.js needs patching, wrap it instead.
 
-## 9. Audio
+## 10. Audio
 
 Everything is synthesized. Two rules learned the hard way:
 
@@ -257,7 +314,7 @@ Everything is synthesized. Two rules learned the hard way:
 A 7.8kHz tone sits right where the ear is most sensitive. Do not put one in the
 room tone. Anything in that range belongs behind `Options > ROOM TONE`.
 
-## 10. Assets
+## 11. Assets
 
 The game currently ships zero binary assets and that is a feature, not a gap —
 it means every material, sign, model and voice can be replaced independently.

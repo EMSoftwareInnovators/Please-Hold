@@ -52,8 +52,11 @@ export function dressBuilding(scene, mats, office) {
   crt.position.set(DESK.terminal.x, DESK.run.top, DESK.terminal.z);
   crt.rotation.y = DESK.terminal.yaw;            // screen faces +Z, i.e. the chair
   root.add(crt);
+  // Not seated-only: using the computer is what SITS you at it. Making the
+  // chair a prerequisite the player had to discover first was the main
+  // reason the terminal felt like a puzzle.
   usable(interactables, crt, {
-    id: 'terminal', label: 'DISPATCH TERMINAL', verb: 'Use', range: 1.5, seatedOnly: true,
+    id: 'terminal', label: 'DISPATCH TERMINAL', verb: 'Sit at', range: 2.2,
   });
   out.crt = crt;
 
@@ -61,6 +64,9 @@ export function dressBuilding(scene, mats, office) {
   kbd.position.set(DESK.keyboard.x, DESK.run.top + 0.001, DESK.keyboard.z);
   kbd.rotation.y = 0;
   root.add(kbd);
+  usable(interactables, kbd, {
+    id: 'terminal', label: 'DISPATCH TERMINAL', verb: 'Sit at', range: 2.2,
+  });
   out.keyboard = kbd;
 
   // --- the telephone ---

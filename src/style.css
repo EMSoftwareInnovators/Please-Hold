@@ -28,7 +28,15 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-#cabinet { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+/* The UI scales against the window rather than against a fixed pixel size.
+   Every terminal measurement below is in `cqw`, so the text is the same
+   apparent size on a 13" laptop and a 32" monitor. The first version drew
+   an 80-column character grid into a 720x540 canvas and stretched it --
+   nine-pixel cells, upscaled and blurry. */
+#cabinet {
+  position: relative; width: 100vw; height: 100vh; overflow: hidden;
+  container-type: size;
+}
 #screen { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 .layer { position: absolute; inset: 0; pointer-events: none; }
@@ -113,10 +121,19 @@ html, body {
 #perf b { color: var(--amber-bright); font-weight: normal; }
 #perf .warn { color: var(--red); }
 
+/* Top centre, not bottom: the call panel owns the bottom of the screen and
+   an objective placed there renders behind whoever is talking. */
 #objective {
-  position: absolute; left: 22px; bottom: 24px; font-size: 11px;
-  letter-spacing: 0.16em; color: var(--amber-dim); max-width: 40ch;
+  position: absolute; left: 50%; top: 3.2cqh; transform: translateX(-50%);
+  font-size: 1.35cqw; letter-spacing: 0.2em; color: var(--amber-bright);
+  text-align: center; max-width: 52cqw; text-shadow: 0 1px 10px #000;
+  background: rgba(10, 9, 7, 0.88); border: 1px solid var(--edge);
+  border-left: 2px solid var(--amber); border-right: 2px solid var(--amber);
+  padding: 0.7cqh 1.4cqw;
 }
+#objective:empty { display: none; }
+#objective.pulse { animation: objPulse 1.4s ease-in-out infinite; }
+@keyframes objPulse { 50% { border-left-color: transparent; border-right-color: transparent; opacity: 0.72; } }
 
 /* ---------------- call panel ---------------- */
 #call {
@@ -161,36 +178,187 @@ html, body {
 }
 #call-keys b { color: var(--amber); }
 
-/* ---------------- terminal overlay ---------------- */
+/* ---------------- terminal ----------------
+   A takeover, not an overlay: fully opaque, because a live 3D room
+   showing through 10% of it read as the camera drifting while you were
+   trying to read. ------------------------------------------------- */
 #crt {
-  pointer-events: all; background: rgba(2, 2, 3, 0.9);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  pointer-events: all;
+  background: #05050a;
+  display: grid;
+  place-items: center;
+  padding: 2.2cqh 2.2cqw;
 }
 #crt-frame {
   position: relative;
-  width: min(940px, 84vw);
-  aspect-ratio: 4 / 3;
-  background: #120b04;
-  border: 14px solid #3a352c;
-  border-radius: 22px / 18px;
-  box-shadow: 0 0 0 3px #14120e, 0 30px 90px rgba(0, 0, 0, 0.85), inset 0 0 90px rgba(0, 0, 0, 0.8);
+  width: min(100%, 148cqh);
+  height: 100%;
+  background: #0e0803;
+  border: 1.1cqh solid #322d25;
+  border-radius: 2.2cqh / 1.8cqh;
+  box-shadow: 0 0 0 0.3cqh #14120e, 0 3cqh 9cqh rgba(0, 0, 0, 0.85),
+              inset 0 0 10cqh rgba(0, 0, 0, 0.85);
   overflow: hidden;
 }
-#crt-canvas { width: 100%; height: 100%; display: block; image-rendering: auto; filter: saturate(1.05) brightness(1.06); }
+#crt-screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 1.75cqw;
+  line-height: 1.5;
+  color: var(--amber);
+}
+
+#crt-status {
+  flex: 0 0 auto;
+  display: flex; justify-content: space-between; align-items: center; gap: 1.4cqw;
+  background: var(--amber); color: var(--ink);
+  padding: 0.5cqh 1.4cqw;
+  font-size: 1.6cqw; letter-spacing: 0.22em;
+}
+
+#crt-alert {
+  margin-left: auto; padding: 0 0.9cqw;
+  background: var(--ink); color: var(--amber-bright);
+  letter-spacing: 0.2em;
+}
+#crt-alert:empty { display: none; }
+#crt-alert.ringing { background: #7a1408; color: #ffe2ad; animation: crtRing 0.5s steps(1) infinite; }
+#crt-alert.holding { background: #4a3208; color: #ffe2ad; }
+@keyframes crtRing { 50% { opacity: 0.35; } }
+
+#crt-tabs {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; gap: 0.5cqw;
+  padding: 0.9cqh 1.4cqw 0.5cqh;
+  border-bottom: 1px solid rgba(255, 182, 65, 0.22);
+}
+#crt-tabs button {
+  font: inherit; font-size: 1.5cqw; letter-spacing: 0.14em;
+  background: none; border: 1px solid rgba(255, 182, 65, 0.25);
+  color: var(--amber-dim); padding: 0.35cqh 0.9cqw; cursor: pointer;
+  display: flex; align-items: baseline; gap: 0.5cqw;
+}
+#crt-tabs button b { color: var(--amber); font-weight: normal; }
+#crt-tabs button:hover { border-color: var(--amber); color: var(--amber-bright); }
+#crt-tabs button.on {
+  background: rgba(255, 182, 65, 0.16); border-color: var(--amber);
+  color: var(--amber-bright);
+}
+#crt-tabs button.on b { color: var(--amber-bright); }
+
+#crt-body {
+  flex: 1 1 auto; overflow: hidden auto;
+  padding: 1.2cqh 1.8cqw;
+  display: flex; flex-direction: column;
+}
+
+.t-gap { height: 1.3cqh; flex: 0 0 auto; }
+.t-rule { height: 1px; background: rgba(255, 182, 65, 0.26); margin: 0.7cqh 0; flex: 0 0 auto; }
+.t-head { color: var(--amber-bright); letter-spacing: 0.2em; margin-bottom: 0.3cqh; }
+.t-dim { color: var(--amber-dim); }
+.t-note { color: var(--amber-dim); font-size: 1.45cqw; }
+.t-warn { color: var(--red); }
+.t-bright { color: var(--amber-bright); }
+.t-line { white-space: pre-wrap; display: flex; align-items: baseline; gap: 1.1cqw; padding: 0.3cqh 0.8cqw 0.3cqh 2.2cqw; }
+.t-line .c, .t-cols .c { min-width: 0; overflow-wrap: anywhere; }
+
+.t-cols {
+  display: flex; align-items: baseline; gap: 1.1cqw;
+  padding: 0 0.8cqw 0 2.2cqw;
+  color: var(--amber-dim); font-size: 1.4cqw; letter-spacing: 0.18em;
+  border-bottom: 1px solid rgba(255, 182, 65, 0.16);
+  padding-bottom: 0.35cqh; margin-bottom: 0.35cqh;
+}
+
+.t-kv { display: flex; gap: 1.4cqw; }
+.t-kv .l { flex: 0 0 26cqw; color: var(--amber-dim); letter-spacing: 0.14em; }
+.t-kv .v { color: var(--amber); }
+.t-kv.warn .v { color: var(--red); }
+
+.t-field { display: flex; gap: 1.4cqw; align-items: baseline; margin-bottom: 0.4cqh; }
+.t-field .l { flex: 0 0 12cqw; color: var(--amber-dim); letter-spacing: 0.2em; }
+.t-field .v {
+  flex: 1 1 auto; color: var(--amber-bright); font-size: 2.3cqw;
+  border-bottom: 2px solid rgba(255, 182, 65, 0.4); padding-bottom: 0.2cqh;
+  min-height: 1.4em;
+}
+.t-field .caret { font-style: normal; animation: caret 1s steps(2) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+
+/* Selectable rows. The marker, the background and the brightness all move
+   together, because one of the three on its own is easy to miss. */
+.t-item {
+  display: flex; align-items: baseline; gap: 1.1cqw;
+  padding: 0.4cqh 0.8cqw; cursor: pointer;
+  border-left: 0.35cqw solid transparent;
+  flex-wrap: wrap;
+}
+.t-item .mark { flex: 0 0 auto; width: 1.4cqw; color: transparent; }
+.t-item .c { color: inherit; min-width: 0; overflow-wrap: anywhere; }
+.t-item .c0 { color: var(--amber-bright); }
+.t-item .sub {
+  flex: 1 0 100%; padding-left: 9.4cqw; font-size: 1.4cqw;
+  color: var(--amber-dim); letter-spacing: 0.04em;
+}
+.t-item.sel {
+  background: rgba(255, 182, 65, 0.14);
+  border-left-color: var(--amber);
+  color: var(--amber-bright);
+}
+.t-item.sel .mark { color: var(--amber-bright); }
+.t-item.warn { color: var(--red); }
+.t-item.warn.sel { background: rgba(255, 90, 60, 0.16); border-left-color: var(--red); }
+.t-item.off { color: #6b5c42; }
+
+/* The last column of a row carries its verdict: green only for something
+   that is actually ready, never for something with a condition attached. */
+.tone-good .c:last-child { color: var(--green); }
+.tone-caution .c:last-child { color: var(--amber-bright); }
+.tone-bad .c:last-child { color: var(--red); }
+.tone-off .c:last-child { color: #6b5c42; }
+
+.t-map { flex: 1 1 auto; min-height: 42cqh; }
+.t-map canvas { width: 100%; height: 100%; display: block; }
+
+.t-dead { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: #2a1a08; }
+
+#crt-toast {
+  flex: 0 0 auto; min-height: 2.6cqh;
+  padding: 0 1.8cqw; color: var(--amber-bright); font-size: 1.6cqw;
+  letter-spacing: 0.1em;
+}
+#crt-toast.hint { color: var(--green); }
+
+#crt-keys {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; gap: 0.4cqw 2cqw;
+  padding: 0.7cqh 1.8cqw;
+  border-top: 1px solid rgba(255, 182, 65, 0.22);
+  background: rgba(255, 182, 65, 0.05);
+  font-size: 1.5cqw; color: var(--amber-dim); letter-spacing: 0.08em;
+}
+#crt-keys span { display: flex; align-items: baseline; gap: 0.55cqw; }
+#crt-keys b {
+  font-weight: normal; color: var(--amber);
+  border: 1px solid rgba(255, 182, 65, 0.4); padding: 0 0.45cqw; min-width: 2.4cqw;
+  text-align: center;
+}
+#crt-keys .t-back { margin-left: auto; }
+
 #crt-glass {
   position: absolute; inset: 0; pointer-events: none;
   background:
-    repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0 1px, rgba(0,0,0,0) 1px 3px),
-    radial-gradient(ellipse at 50% 46%, rgba(255,182,65,0.09) 0%, rgba(0,0,0,0) 62%),
-    radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.62) 100%);
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.20) 0 1px, rgba(0,0,0,0) 1px 3px),
+    radial-gradient(ellipse at 50% 46%, rgba(255,182,65,0.07) 0%, rgba(0,0,0,0) 62%),
+    radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 54%, rgba(0,0,0,0.55) 100%);
   mix-blend-mode: screen;
 }
 #crt-glass::after {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(100deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 38%);
+  background: linear-gradient(100deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0) 38%);
 }
-#crt-hint { font-size: 11px; letter-spacing: 0.16em; color: var(--amber-dim); margin: 0; }
-#crt-hint b { color: var(--amber); }
 
 /* ---------------- title ---------------- */
 #title {

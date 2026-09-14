@@ -195,7 +195,7 @@ export default {
       ],
       effects: [
         { op: 'flag', name: 'daley_arc_good' },
-        { op: 'beat', to: 4 },
+        { op: 'beat', to: 5 },
       ],
       end: true,
     },
@@ -205,7 +205,7 @@ export default {
       lines: [
         { text: "Goodnight." },
       ],
-      effects: [{ op: 'beat', to: 4 }],
+      effects: [{ op: 'beat', to: 5 }],
       end: true,
     },
 

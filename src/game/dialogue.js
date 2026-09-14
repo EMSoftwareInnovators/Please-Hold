@@ -65,6 +65,12 @@ export function validateCall(call) {
       errs.push(`${where}: unknown speaker "${node.speaker}"`);
     }
     if (node.lines && !Array.isArray(node.lines)) errs.push(`${where}: lines must be an array`);
+    if (node.waitFor && !node.next) {
+      errs.push(`${where}: has waitFor but no next -- it would block forever`);
+    }
+    if (node.waitFor && node.choices) {
+      errs.push(`${where}: waitFor and choices on the same node; pick one`);
+    }
     for (const [i, l] of (node.lines || []).entries()) {
       if (typeof l === 'string') continue;
       if (!l || typeof l.text !== 'string') errs.push(`${where}: line ${i} has no text`);
@@ -151,6 +157,7 @@ export function meets(req, ctx) {
   if (req.crewDispatched && crews && !crews.isDispatched(req.crewDispatched)) return false;
   if (req.anyCrewDispatched && crews && crews.dispatchedCount() === 0) return false;
   if (req.crewAvailable && crews && !crews.available().length) return false;
+  if (req.ticketCount != null && outages && outages.list.length < req.ticketCount) return false;
   if (typeof req.test === 'function' && !req.test(ctx)) return false;
   return true;
 }
@@ -175,6 +182,8 @@ export class DialogueRunner {
     this.active = false;
     this.paused = false;             // true while the caller is on hold
     this.waiting = false;            // true while a line is being spoken
+    this.blocked = false;            // true while a waitFor node is unsatisfied
+    this.hint = null;                // what the player is being asked to do
     this._onLineDone = null;
     this.history = [];
   }
@@ -256,6 +265,25 @@ export class DialogueRunner {
     if (this.paused || !this.active) return;
     const line = this._line(this.lineIndex);
     if (line) return this._speakCurrentLine();
+
+    /* A `waitFor` node holds the conversation until the player has actually
+       done something -- sat down, looked up an account, sent a truck. It is
+       what lets the tutorial teach by doing instead of by telling, and any
+       later call can use it to wait on real work. `tick()` re-checks it. */
+    if (this.node.waitFor && !meets(this.node.waitFor, this._ctx())) {
+      if (!this.blocked) {
+        this.blocked = true;
+        this.hint = this.node.hint || null;
+        bus.emit(EVENTS.WAITING, { call: this.call, node: this.nodeId, hint: this.hint });
+      }
+      return;
+    }
+    if (this.blocked) {
+      this.blocked = false;
+      this.hint = null;
+      bus.emit(EVENTS.WAITING, { call: this.call, node: this.nodeId, hint: null });
+    }
+
     // Out of lines: either offer choices, follow `next`, or end.
     if (this.node.end) return this.end('script');
     const avail = this._availableChoices();
@@ -316,6 +344,12 @@ export class DialogueRunner {
       });
   }
 
+  /** Called every frame. Only does anything while a waitFor is unsatisfied. */
+  tick() {
+    if (!this.active || this.paused || !this.blocked) return;
+    if (meets(this.node.waitFor, this._ctx())) this._advanceLines();
+  }
+
   /** The player picked a reply. `index` is into the AVAILABLE list. */
   choose(index) {
     if (!this.active || this.paused) return false;
@@ -372,6 +406,8 @@ export class DialogueRunner {
   capture() {
     if (!this.active || !this.call) return null;
     return {
+      blocked: this.blocked,
+      hint: this.hint,
       call: this.call,
       nodeId: this.nodeId,
       lineIndex: this.lineIndex,
@@ -395,6 +431,8 @@ export class DialogueRunner {
     this.history = snap.history.slice();
     this._pendingGoto = snap.pendingGoto;
     this._playerEnd = snap.playerEnd;
+    this.blocked = snap.blocked;
+    this.hint = snap.hint;
     this.active = true;
     this.paused = true;      // resume() is what wakes it
     return true;
@@ -421,6 +459,11 @@ export class DialogueRunner {
   end(reason = 'script') {
     if (!this.active) return;
     this.active = false;
+    if (this.blocked) {
+      this.blocked = false;
+      this.hint = null;
+      bus.emit(EVENTS.WAITING, { call: this.call, node: this.nodeId, hint: null });
+    }
     const call = this.call;
     const nodeId = this.nodeId;
     this.node = null;

@@ -95,7 +95,12 @@ export class HUD {
     while (this.el.toasts.children.length > 5) this.el.toasts.firstChild.remove();
   }
 
-  setObjective(text) { this.el.objective.textContent = text || ''; }
+  /** The one line telling the player what to do. `pulse` for things the
+   *  game is actively waiting on, so it is not mistaken for flavour text. */
+  setObjective(text, pulse = false) {
+    this.el.objective.textContent = text || '';
+    this.el.objective.classList.toggle('pulse', !!text && pulse);
+  }
 
   /** F3. Shows what the frame is actually being spent on. */
   togglePerf() {

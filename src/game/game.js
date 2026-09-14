@@ -47,6 +47,7 @@ import { Player } from './player.js';
 import { InteractionSystem } from './interaction.js';
 
 import { Terminal, SCREENS } from '../ui/terminal.js';
+import { TerminalView } from '../ui/terminalview.js';
 import { HUD } from '../ui/hud.js';
 import { CallUI } from '../ui/callui.js';
 import { Menu } from '../ui/menu.js';
@@ -240,8 +241,7 @@ export class Game {
     crt.userData.screenMaterial.emissiveIntensity = 0.78;
     crt.userData.screenMaterial.needsUpdate = true;
     this._screenTexture = tex;
-    this.crtDisplay = document.getElementById('crt-canvas');
-    this.crtCtx = this.crtDisplay.getContext('2d');
+    this.terminalView = new TerminalView(this.terminal, this.clock);
 
     this._wireEvents();
     this._wireKeys();
@@ -352,9 +352,17 @@ export class Game {
     });
 
     bus.on(EVENTS.RING, () => {
-      if (!this.player.seated) this.hud.setObjective('THE PHONE IS RINGING');
+      if (!this.player.seated) this.hud.setObjective('THE PHONE IS RINGING', true);
     });
     bus.on(EVENTS.ANSWERED, () => this.hud.setObjective(''));
+
+    // A waitFor node is the conversation asking the player to do something.
+    // Whatever it is waiting for goes on screen until they have done it.
+    bus.on(EVENTS.WAITING, ({ hint }) => {
+      this.hud.setObjective(hint || '', !!hint);
+      if (hint) this.terminalView.hint = hint;
+      else this.terminalView.hint = null;
+    });
 
     bus.on(EVENTS.POWER, ({ level }) => {
       if (this._screenTexture) this._screenTexture.needsUpdate = true;
@@ -388,9 +396,17 @@ export class Game {
 
     // The terminal takes the keyboard while the player is leaning into it.
     if (this.terminalFocused) {
-      if (e.code === 'KeyT' && !this.terminal.input) { this.focusTerminal(false); e.preventDefault(); return; }
-      if (e.key === 'Escape' && this.terminal.screen === SCREENS.MENU) { this.focusTerminal(false); return; }
-      if (this.terminal.handleKey(e)) e.preventDefault();
+      // T always steps back, even mid-search: it is the one key that is
+      // guaranteed to get the player out of the terminal.
+      if (e.code === 'KeyT' && this.terminal.screen !== SCREENS.ACCOUNT) {
+        this.focusTerminal(false); e.preventDefault(); return;
+      }
+      // F1-F6 belong to the terminal while it is focused. The perf overlay
+      // also lives on F3, and stealing it here sent the player to the perf
+      // readout instead of the ticket list.
+      // handleKey returns false only when ESC has nothing left to back out of.
+      if (this.terminal.handleKey(e)) { e.preventDefault(); return; }
+      if (e.key === 'Escape') { this.focusTerminal(false); return; }
       return;
     }
 
@@ -401,7 +417,7 @@ export class Game {
       case 'KeyH': this.toggleHold(); break;
       case 'KeyX': this.hangUp(); break;
       case 'KeyQ': if (this.player.seated) this.player.stand(); break;
-      case 'KeyT': if (this.player.seated) this.focusTerminal(true); break;
+      case 'KeyT': this.focusTerminal(true); break;
       case 'KeyE': this.interaction.activate(); break;
       case 'Enter':
         if (this.callUI.choices.length) this.callUI.pick();
@@ -452,12 +468,25 @@ export class Game {
     return true;
   }
 
+  /**
+   * Lean in to the terminal, or step back.
+   *
+   * Using the computer means sitting down at it: if the player is standing,
+   * this puts them in the chair first. Requiring them to find and click the
+   * chair before the monitor would even respond was the single most
+   * confusing thing about the first version.
+   *
+   * While focused the world keeps running (the phone still rings, the storm
+   * still moves) but the player is locked: no look, no movement, and the
+   * terminal is opaque so nothing appears to drift behind it.
+   */
   focusTerminal(on) {
     if (on && !this.player.seated) {
       this.player.sit({ x: DESK.seat.x, z: DESK.seat.z, yaw: DESK.seat.yaw, eye: DESK.seatEye });
     }
     this.terminalFocused = on;
-    document.getElementById('crt').classList.toggle('hidden', !on);
+    this.terminalView.show(on);
+    this.hud.show(!on);
     this.hud.setReticle(!on);
     this.setMode(on ? 'ui' : 'world');
     if (on) {
@@ -593,6 +622,7 @@ export class Game {
       this.director.update(dt);
       this.radio.update(dt);
       this.horror.update(dt);
+      this.runner.tick();
       this.callUI.update(dt);
 
       // The field advances on shift MINUTES, not frames. Step through every
@@ -636,11 +666,23 @@ export class Game {
     this._updateWorldObjects(dt);
     this.terminal.update(dt);
     if (this._screenTexture) this._screenTexture.needsUpdate = true;
-    if (this.terminalFocused) this._blitTerminal();
+    if (this.terminalFocused) this.terminalView.lineAlert = this._lineAlert();
+    this.terminalView.update();
 
     this.renderer.render(this.scene, this.time, frameMs);
     if (this.hud) this.hud.updatePerf(this.renderer, this.scene);
     this.input.endFrame();
+  }
+
+  /** What the telephone should be shouting at a player who is heads-down in
+   *  the terminal. The HUD is hidden there, so this is the only warning. */
+  _lineAlert() {
+    const ringing = this.phone.lines.find((l) => l.state === 'RINGING');
+    if (ringing) return { kind: 'ringing', text: `LINE ${ringing.index + 1} RINGING — F TO ANSWER` };
+    if (this.phone.activeLine != null) return { kind: '', text: `LINE ${this.phone.activeLine + 1} — CALL IN PROGRESS` };
+    const held = this.phone.oldestHeld;
+    if (held) return { kind: 'holding', text: `LINE ${held.index + 1} HOLDING ${Math.round(held.heldSeconds)}s` };
+    return null;
   }
 
   /** Clocks, CRT glow, the radio needle -- the room reacting to the sim. */

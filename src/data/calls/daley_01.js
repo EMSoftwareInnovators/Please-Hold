@@ -28,7 +28,7 @@ export default {
   },
   category: 'outage',
   priority: 70,
-  schedule: { type: 'beat', beat: 1 },
+  schedule: { type: 'beat', beat: 2 },
   hold: { patience: 150, longHold: 40, onReturnNode: 'back_from_hold', trustOnTimeout: -1 },
 
   entry: 'start',
@@ -243,7 +243,7 @@ export default {
         { op: 'log', text: 'DALEY E - 18 ORCHARD ST - TR opened', kind: 'call' },
         { op: 'trust', delta: 1 },
         { op: 'schedule', call: 'daley_02', delay: 34 },
-        { op: 'beat', to: 2 },
+        { op: 'beat', to: 3 },
       ],
       end: true,
     },
@@ -257,7 +257,7 @@ export default {
       effects: [
         { op: 'log', text: 'DALEY E - 18 ORCHARD ST - TR opened', kind: 'call' },
         { op: 'schedule', call: 'daley_02', delay: 30 },
-        { op: 'beat', to: 2 },
+        { op: 'beat', to: 3 },
       ],
       end: true,
     },

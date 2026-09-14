@@ -63,7 +63,19 @@ for (const id of ids) {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       let guard = 0;
       let picks = 0;
+      let gates = 0;
       while (!ended && guard++ < 4000) {
+        /* Step over `waitFor` gates. This test is about the GRAPH -- whether
+           every path reaches an end -- not about whether a gate's condition
+           can be met, which is tools/tutorial.mjs's job. A gate left in place
+           here would block forever and look like a dead end. */
+        if (g.runner.blocked && g.runner.node && g.runner.node.next) {
+          g.runner.blocked = false;
+          g.runner.hint = null;
+          gates++;
+          g.runner._goto(g.runner.node.next);
+          continue;
+        }
         if (g.callUI.choices.length) {
           const n = g.callUI.choices.length;
           g.callUI.pick(Math.min(n - 1, strategy));
@@ -83,7 +95,7 @@ for (const id of ids) {
       }
       offEnd(); offLine();
       const total = Object.keys(call.nodes).length;
-      return { id, strategy, ended, guard, picks, visited: visited.size, total, stalled: !ended };
+      return { id, strategy, ended, guard, picks, gates, visited: visited.size, total, stalled: !ended };
     }, [id, strategy]);
     results.push(r);
   }
@@ -92,14 +104,16 @@ for (const id of ids) {
 const stalled = results.filter((r) => r.stalled);
 const byCall = {};
 for (const r of results) {
-  byCall[r.id] = byCall[r.id] || { visited: new Set(), total: r.total, ok: 0, stalled: 0 };
+  byCall[r.id] = byCall[r.id] || { visited: new Set(), total: r.total, ok: 0, stalled: 0, gates: 0 };
   byCall[r.id][r.stalled ? 'stalled' : 'ok']++;
+  byCall[r.id].gates = Math.max(byCall[r.id].gates, r.gates || 0);
   byCall[r.id].visited.add(r.visited);
 }
 
-console.log('call'.padEnd(16) + 'runs'.padEnd(7) + 'stalled'.padEnd(9) + 'nodes');
+console.log('call'.padEnd(16) + 'runs'.padEnd(7) + 'stalled'.padEnd(9) + 'gates'.padEnd(7) + 'nodes');
 for (const [id, d] of Object.entries(byCall)) {
-  console.log(id.padEnd(16) + String(d.ok + d.stalled).padEnd(7) + String(d.stalled).padEnd(9) + `${Math.max(...d.visited)}/${d.total}`);
+  console.log(id.padEnd(16) + String(d.ok + d.stalled).padEnd(7) + String(d.stalled).padEnd(9)
+    + String(d.gates).padEnd(7) + `${Math.max(...d.visited)}/${d.total}`);
 }
 
 if (stalled.length) {

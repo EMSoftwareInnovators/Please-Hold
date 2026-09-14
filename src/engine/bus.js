@@ -34,6 +34,7 @@ export const EVENTS = {
   LINE_SPOKEN: 'dialogue:line',
   CHOICES: 'dialogue:choices',
   DIALOGUE_END: 'dialogue:end',
+  WAITING: 'dialogue:waiting',      // a waitFor node is holding for the player
 
   // work
   OUTAGE_NEW: 'outage:new',

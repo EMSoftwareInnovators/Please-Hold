@@ -110,7 +110,7 @@ npm run shots        # capture screenshots to ./shots
 | `E` | use what you are looking at |
 | `Q` | stand up from the desk |
 | `Esc` | pause |
-| `F3` | frame time, draw calls, light count |
+| `F3` | frame time, draw calls, light count (outside the terminal) |
 
 ### The telephone
 | Key | |
@@ -126,14 +126,19 @@ Some will not, and they will remember.
 ### The terminal
 | Key | |
 |---|---|
-| `T` | lean in to the CRT / step back |
-| `F1` – `F6` | menu, accounts, tickets, map, dispatch, log |
+| `T` | sit down at the terminal / step back from it |
+| `F1` – `F6` | menu, accounts, tickets, map, units, log |
 | arrows | move the selection |
 | `Return` | search, open a record, assign a unit |
-| `Space` | open the selected account |
 | `N` | open a new trouble ticket |
 | `H` | (on a new ticket) mark it a hazard |
-| `Esc` | back |
+| `Esc` | back one step |
+| mouse | click the tabs, click any row |
+
+Using the computer is what sits you at it — you do not have to find the chair
+first. The terminal takes over the screen and locks the camera while you are
+in it; a ringing line shows in its status bar so you can still hear the phone
+with your head down.
 
 Several dialogue replies are only available once you have actually looked
 something up. That is deliberate: you cannot confirm a service address you have
@@ -166,11 +171,17 @@ not read.
 | Rendering budget | baked static lighting, a pooled light rig, static geometry merging, three quality presets and an adaptive resolution scaler |
 | Game clock | shift time, and events that can lie about it |
 | Save | checkpoint at every story beat |
-| UI | title, options, how-to, pause, HUD, call panel, CRT reader, end-of-shift report |
+| UI | title, options, how-to, pause, HUD, call panel, a full-takeover CRT terminal that scales with the window, end-of-shift report |
+| Tutorial | `waitFor` dialogue nodes that hold a conversation until the player performs a real action, with an on-screen objective |
 
-**The shift** — 13 call scripts, 211 nodes, 374 lines, 159 player replies:
+**The shift** — 14 call scripts, 238 nodes, 420 lines, 169 player replies:
 
-* four ordinary utility calls that teach the job and give the night its texture
+* **a handover call that teaches the desk by waiting for you to use it.** The
+  night supervisor rings from home on your first solo shift and walks you
+  through sitting down, the terminal, an account lookup, a ticket, a crew, and
+  the hold button — each step held open until you have actually done it.
+  Nothing in it is strange, which is the point
+* four ordinary utility calls that give the night its texture
 * **Mrs. Daley**, who calls twice and remembers what you did the first time
 * a hazard call that forces a real trade-off against a finite number of trucks
 * a crew sequence over the radio that finds something that should not be there
@@ -187,8 +198,10 @@ not read.
 |---|---|
 | ![the office](docs/shots/03-office.png) | ![a call](docs/shots/13-call-choices.png) |
 | the dispatch room at 22:45 | a caller, and four ways to answer |
-| ![an account](docs/shots/08-terminal-record.png) | ![the map](docs/shots/12-terminal-map-outages.png) |
-| the CRT: an account, with a medical alert | the CRT: circuits with trouble |
+| ![an account](docs/shots/08-terminal-record.png) | ![units](docs/shots/11-terminal-dispatch.png) |
+| the terminal: an account, with a medical alert | the terminal: who you can send, and who you cannot |
+| ![the map](docs/shots/12-terminal-map-outages.png) | ![the handover](docs/shots/12b-tutorial.png) |
+| the terminal: circuits with trouble | the handover call, waiting for you to do the thing |
 | ![1956](docs/shots/15-1956-call.png) | ![please hold](docs/shots/20-please-hold.png) |
 | a caller whose line does not sound like 1999 | the end of the slice |
 

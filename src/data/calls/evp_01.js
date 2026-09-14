@@ -33,7 +33,7 @@ export default {
   debt: 3,
   rings: 20,
   ring: 'ringBell',                  // the wrong ring. The set does not do this.
-  schedule: { type: 'beat', beat: 6 },
+  schedule: { type: 'beat', beat: 7 },
   hold: { patience: 9999 },          // it will wait. It has nothing else to do.
 
   entry: 'start',
@@ -135,7 +135,7 @@ export default {
       ],
       effects: [
         { op: 'sound', name: 'lineDrop' },
-        { op: 'beat', to: 7 },
+        { op: 'beat', to: 8 },
       ],
       end: true,
     },
@@ -149,7 +149,7 @@ export default {
       effects: [
         { op: 'sound', name: 'lineDrop' },
         { op: 'flag', name: 'evp_said_please' },
-        { op: 'beat', to: 7 },
+        { op: 'beat', to: 8 },
       ],
       end: true,
     },

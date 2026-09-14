@@ -22,7 +22,8 @@ export default {
   },
   category: 'outage',
   priority: 60,
-  schedule: { type: 'beat', beat: 0 },
+  schedule: { type: 'beat', beat: 1 },
+  requires: { flags: ['tutorial_done'] },
   hold: { patience: 55, longHold: 25, onReturnNode: 'back_from_hold', trustOnTimeout: -2, timeoutFlag: 'merrick_hung_up' },
 
   entry: 'start',
@@ -307,7 +308,7 @@ export default {
       ],
       effects: [
         { op: 'log', text: 'MERRICK D - TR opened - caller satisfied', kind: 'call' },
-        { op: 'beat', to: 1 },
+        { op: 'beat', to: 2 },
       ],
       end: true,
     },
@@ -320,7 +321,7 @@ export default {
       ],
       effects: [
         { op: 'log', text: 'MERRICK D - TR opened', kind: 'call' },
-        { op: 'beat', to: 1 },
+        { op: 'beat', to: 2 },
       ],
       end: true,
     },

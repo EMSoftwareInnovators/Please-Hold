@@ -36,7 +36,7 @@ export default {
   debt: 4,
   rings: 22,
   ring: 'ringBell',
-  schedule: { type: 'beat', beat: 8 },
+  schedule: { type: 'beat', beat: 9 },
   hold: { patience: 9999, longHold: 30, onReturnNode: 'back_from_hold' },
 
   entry: 'start',
@@ -435,7 +435,7 @@ export default {
       ],
       effects: [
         { op: 'flag', name: 'slice_complete' },
-        { op: 'beat', to: 9 },
+        { op: 'beat', to: 10 },
         { op: 'log', text: 'END OF SHIFT RECORD.', kind: 'end' },
       ],
       end: true,

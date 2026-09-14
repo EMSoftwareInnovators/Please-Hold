@@ -32,7 +32,7 @@ export default {
   category: 'anomaly',
   priority: 75,
   debt: 2,
-  schedule: { type: 'beat', beat: 5 },
+  schedule: { type: 'beat', beat: 6 },
   hold: { patience: 110, longHold: 40, onReturnNode: 'back_from_hold' },
 
   entry: 'start',
@@ -271,7 +271,7 @@ export default {
       effects: [
         { op: 'remember', key: 'low_wire_at_the_turn' },
         { op: 'flag', name: 'holbrook_done' },
-        { op: 'beat', to: 6 },
+        { op: 'beat', to: 7 },
       ],
       end: true,
     },

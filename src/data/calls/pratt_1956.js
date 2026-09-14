@@ -39,7 +39,7 @@ export default {
   debt: 3,
   rings: 14,
   ring: 'ringBell',
-  schedule: { type: 'beat', beat: 7 },
+  schedule: { type: 'beat', beat: 8 },
   hold: { patience: 240, longHold: 60, onReturnNode: 'back_from_hold' },
 
   entry: 'start',
@@ -350,7 +350,7 @@ export default {
       effects: [
         { op: 'sound', name: 'lineDrop' },
         { op: 'log', text: 'PRATT E - line dropped. No ANI. No trunk record.', kind: 'anomaly' },
-        { op: 'beat', to: 8 },
+        { op: 'beat', to: 9 },
       ],
       end: true,
     },
@@ -366,7 +366,7 @@ export default {
         { op: 'sound', name: 'lineDrop' },
         { op: 'flag', name: 'pratt_warned_about_halloran' },
         { op: 'log', text: 'PRATT E - line dropped. No ANI. No trunk record.', kind: 'anomaly' },
-        { op: 'beat', to: 8 },
+        { op: 'beat', to: 9 },
       ],
       end: true,
     },

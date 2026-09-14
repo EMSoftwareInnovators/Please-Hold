@@ -61,13 +61,27 @@
     </div>
   </div>
 
-  <!-- ============ TERMINAL (full screen read) ============ -->
+  <!-- ============ TERMINAL ============
+       A full takeover, not an overlay. The first version was 90% opaque
+       over a live 3D room, so the storm kept moving behind the text and
+       read as the camera drifting. -->
   <div id="crt" class="layer hidden">
     <div id="crt-frame">
-      <canvas id="crt-canvas" width="720" height="540"></canvas>
+      <div id="crt-screen">
+        <div id="crt-status">
+          <span id="crt-title"></span>
+          <!-- The HUD is hidden while the terminal is up, so the telephone
+               has to report itself here or a ringing line is invisible. -->
+          <span id="crt-alert"></span>
+          <span id="crt-clock"></span>
+        </div>
+        <nav id="crt-tabs"></nav>
+        <div id="crt-body"></div>
+        <div id="crt-toast"></div>
+        <div id="crt-keys"></div>
+      </div>
       <div id="crt-glass"></div>
     </div>
-    <p id="crt-hint">F1-F6 screens &middot; ESC back &middot; TAB / arrows &middot; <b>T</b> to step back from the terminal</p>
   </div>
 
   <!-- ============ TITLE / MENU ============ -->

@@ -157,6 +157,7 @@ export class PhoneSystem {
     const id = line.call.caller.id || line.call.id;
     const rec = this.state.caller(id);
     rec.onHoldSeconds += Math.round(line.heldSeconds);
+    this.state.set('used_hold', true);
 
     // RESUME goes out FIRST so the call panel is back on screen before the
     // runner speaks or re-offers replies. The other order meant the panel

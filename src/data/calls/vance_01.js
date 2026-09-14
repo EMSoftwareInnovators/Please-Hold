@@ -27,7 +27,7 @@ export default {
   category: 'hazard',
   priority: 100,
   rings: 16,
-  schedule: { type: 'beat', beat: 2 },
+  schedule: { type: 'beat', beat: 3 },
   hold: { patience: 40, longHold: 18, onReturnNode: 'back_from_hold', trustOnTimeout: -2, timeoutFlag: 'vance_abandoned' },
 
   entry: 'start',
@@ -280,7 +280,7 @@ export default {
       effects: [
         { op: 'log', text: 'VANCE K - BETHEL PIKE hazard - handled', kind: 'call' },
         { op: 'flag', name: 'vance_handled_well' },
-        { op: 'beat', to: 3 },
+        { op: 'beat', to: 4 },
       ],
       end: true,
     },
@@ -292,7 +292,7 @@ export default {
       ],
       effects: [
         { op: 'log', text: 'VANCE K - BETHEL PIKE hazard', kind: 'call' },
-        { op: 'beat', to: 3 },
+        { op: 'beat', to: 4 },
       ],
       end: true,
     },

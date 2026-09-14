@@ -82,12 +82,7 @@ await page.evaluate(() => window.__game.focusTerminal(true));
 await settle(600);
 await shot('07-terminal-search');
 
-await page.evaluate(() => {
-  const g = window.__game;
-  g.terminal.record = g.database.get('WH-40122');
-  g.database.markLookedUp('WH-40122');
-  g.terminal.dirty = true;
-});
+await page.evaluate(() => window.__game.terminal.openRecord('WH-40122'));
 await settle(500);
 await shot('08-terminal-record');
 
@@ -107,9 +102,9 @@ await shot('10-terminal-tickets');
 
 await page.evaluate(() => {
   const g = window.__game;
+  g.terminal.go('DISP', true);
   g.terminal.ticket = g.outages.open[0];
-  g.terminal.go('DISP');
-  g.terminal.ticket = g.outages.open[0];
+  g.terminal.dirty = true;
 });
 await settle(600);
 await shot('11-terminal-dispatch');
@@ -121,9 +116,36 @@ await shot('12-terminal-map-outages');
 await page.evaluate(() => window.__game.focusTerminal(false));
 await settle(500);
 
-// a call in progress
+// the handover call, and the instruction it is waiting on
 await page.evaluate(() => {
   const g = window.__game;
+  g.phone.lines.forEach((l) => { l.state = 'IDLE'; l.call = null; });
+  g.phone.activeLine = null;
+  g.runner.end('reset');
+  const call = window.__calls.find((c) => c.id === 'tutorial_01');
+  g.phone.ring(call);
+  g.phone.answer();
+});
+await settle(2400);
+await page.evaluate(() => {
+  const g = window.__game;
+  for (let i = 0; i < 24 && !g.runner.blocked; i++) {
+    if (g.callUI.choices.length) g.callUI.pick(1);
+    else if (g.callUI.visible) {
+      g.callUI._timer = 0;
+      if (g.callUI._pendingPlayerLine) { g.callUI._pendingPlayerLine = false; g.runner.playerLineFinished(); }
+      else g.runner.lineFinished();
+    }
+  }
+});
+await settle(1200);
+await shot('12b-tutorial');
+
+await page.evaluate(() => {
+  const g = window.__game;
+  g.runner.end('reset');
+  g.phone.lines.forEach((l) => { l.state = 'IDLE'; l.call = null; });
+  g.phone.activeLine = null;
   const call = window.__calls.find((c) => c.id === 'daley_01');
   g.phone.ring(call);
   g.phone.answer();

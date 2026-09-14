@@ -26,7 +26,7 @@ export default {
   },
   category: 'crew',
   priority: 90,
-  schedule: { type: 'beat', beat: 3 },
+  schedule: { type: 'beat', beat: 4 },
 
   entry: 'start',
   nodes: {
@@ -203,7 +203,7 @@ export default {
       ],
       effects: [
         { op: 'crew.status', crew: 'T7', status: 'AVAILABLE' },
-        { op: 'beat', to: 5 },
+        { op: 'beat', to: 6 },
       ],
       end: true,
     },
@@ -215,7 +215,7 @@ export default {
       ],
       effects: [
         { op: 'crew.status', crew: 'T7', status: 'AVAILABLE' },
-        { op: 'beat', to: 5 },
+        { op: 'beat', to: 6 },
       ],
       end: true,
     },

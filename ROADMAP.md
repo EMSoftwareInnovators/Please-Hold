@@ -62,7 +62,12 @@ result was checked, not assumed.
 - [x] Story scheduler with beat / time / random calls and a mundane-debt rhythm
 - [x] 13 horror events across three escalation tiers
 - [x] Checkpoint save at every story beat
-- [x] 13 call scripts — 211 nodes, 374 lines, 159 player replies
+- [x] **A tutorial that teaches by waiting** — `waitFor` dialogue nodes that
+      hold until the player performs a real action, with an on-screen objective
+- [x] **A terminal that is actually usable** — one state machine, two
+      renderers (a coarse canvas for the CRT in the room, scalable DOM for
+      reading), opaque takeover, locked camera, clickable rows and tabs
+- [x] 14 call scripts — 238 nodes, 420 lines, 169 player replies
 - [x] The full slice runs start to finish: 23/23 playthrough assertions pass
 
 ---
@@ -106,8 +111,9 @@ result was checked, not assumed.
 6. The **horror `degrade` and `tunnel` events restore the grade with a
    `requestAnimationFrame` loop** that does not stop if the event is re-fired
    mid-restore. Harmless today; will misbehave if two grade events overlap.
-7. **Mouse input in the terminal is not wired.** The CRT is keyboard-only, which
-   is period-correct but means a player who reaches for the mouse gets nothing.
+7. **The tube canvas and the DOM view are two renderers of one description.**
+   They cannot disagree about content, but they can about layout — a row kind
+   added to one and not styled in the other will render, plainly, in both.
 
 ---
 
@@ -129,7 +135,7 @@ Everything generated, nothing shipped as a file:
 ## Next milestone — recommended order
 
 ### 1. Finish the night (highest value)
-The slice ends at beat 9. Extend to a full 22:45→06:00 shift:
+The slice ends at beat 10. Extend to a full 22:45→06:00 shift:
 * 8–12 more ordinary calls so the random pool does not run dry (the director
   already has a time-decay fallback for this, but more traffic is the real fix)
 * a second and third recurring caller with the Daley treatment
@@ -152,7 +158,6 @@ The pipeline is finished and unused. Recording even the 30 lines of
 `keefe_1978` would transform the ending. Start there, not at the beginning.
 
 ### 5. Terminal depth
-* mouse support
 * an account-history screen (the microfilm cartons in Records are a promise)
 * the ability to *edit* a record, so the player can watch their own edit change
 
