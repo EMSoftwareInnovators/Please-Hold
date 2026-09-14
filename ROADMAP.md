@@ -21,7 +21,10 @@ result was checked, not assumed.
 - [x] Named material library with a one-call path to replace any recipe with art
 - [x] Static geometry merging (907 meshes → 383 draw calls)
 - [x] Full WebAudio synthesis: no audio files ship
-- [x] Input with world / UI mode separation and pointer lock
+- [x] Input with world / UI mode separation and pointer lock, one binding
+      table (`engine/controls.js`), and **gamepad support** — pad buttons fold
+      into the same key set, Xbox / PlayStation button art chosen from the
+      pad's own id, and every key hint on screen prints in whatever is held
 
 ### World
 - [x] Data-driven floor plan: dispatch room, corridor, break room, records
@@ -67,8 +70,14 @@ result was checked, not assumed.
 - [x] **A terminal that is actually usable** — one state machine, two
       renderers (a coarse canvas for the CRT in the room, scalable DOM for
       reading), opaque takeover, locked camera, clickable rows and tabs
+- [x] **A live call docked under the terminal**, with the arrow keys handed
+      between the two panels so neither the caller nor the terminal can be
+      locked out, and the panel that has them saying so
+- [x] Written instructions that name the player's actual controls: hints carry
+      `{action}` tokens and are expanded per input family at display time
 - [x] 14 call scripts — 238 nodes, 420 lines, 169 player replies
-- [x] The full slice runs start to finish: 23/23 playthrough assertions pass
+- [x] The full slice runs start to finish: 29/29 playthrough assertions pass,
+      21/21 tutorial assertions, 28/28 control assertions
 
 ---
 
@@ -82,7 +91,8 @@ result was checked, not assumed.
 | **Doors** | Room doors are geometry and are drawn ajar. They do not open. The exit door is correctly locked and solid. |
 | **Crew skills** | Skill matching, "not rated for this" and the follow-up radio call are implemented. Crews never refuse a job, get tired, or go out of service on their own. |
 | **The second clock** | The corridor clock carries the drift and the horror event sets it. Nothing yet forces the player to notice; it rewards a player who checks. |
-| **Options** | All options apply. Key rebinding is a table in `input.js` but has no UI. |
+| **Options** | All options apply. Bindings are one table in `engine/controls.js`, which is what a rebinding UI would edit; there is no such UI yet, and no stick-sensitivity or invert-Y option for a pad. |
+| **Gamepad** | Movement, look, menus, the telephone and the terminal are all on the pad, and hints re-label themselves. There is no on-screen keyboard, so the account search still needs a keyboard to type into. |
 
 ---
 
@@ -114,6 +124,15 @@ result was checked, not assumed.
 7. **The tube canvas and the DOM view are two renderers of one description.**
    They cannot disagree about content, but they can about layout — a row kind
    added to one and not styled in the other will render, plainly, in both.
+8. **No controller has actually been held.** `tools/controls.mjs` drives the
+   pad path with the same synthetic button events `input.js` produces, so the
+   routing, the button art and the menus are covered — but there is no gamepad
+   in CI, and nothing here has confirmed a real stick's dead zone, a trigger's
+   resting value, or that a DualSense reports the id the scheme detector
+   expects.
+9. **The account search cannot be typed into with a pad**, as above. On a
+   controller the shoulder buttons reach every screen and every list, but the
+   one text field in the game needs a keyboard.
 
 ---
 
@@ -166,7 +185,15 @@ The pipeline is finished and unused. Recording even the 30 lines of
 * a light-switch interaction, so darkness can be the player's own fault
 * a second floor or a basement for the equipment room the conduit implies
 
-### 7. Confirm the performance work on a GPU
+### 7. Controls polish
+* a rebinding UI over the `ACTIONS` table (the data is already shaped for it)
+* stick sensitivity, dead zone and invert-Y in Options
+* an on-screen keyboard for the account search, so a pad can finish a shift
+  without reaching for a keyboard
+* test on a real controller: dead zones, trigger rest values, and whether a
+  DualSense reports an id the scheme detector recognises
+
+### 8. Confirm the performance work on a GPU
 The structural fixes are in (see Known problems 1). What remains is measurement:
 run `F3` on real hardware at each preset, confirm the adaptive scaler settles
 where it should, and profile the rain and wet-glass shaders, which are the

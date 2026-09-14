@@ -144,8 +144,59 @@ While the terminal is focused the player is locked: no look, no movement. The
 HUD is hidden, so anything urgent — a ringing line — must be surfaced in the
 terminal's own status bar, or it is invisible.
 
-**F1–F6 belong to the terminal.** The perf overlay also lives on F3; it is
+**The screens are on the number row, 1–6.** They were on F1–F6, which most
+laptops put behind an `Fn` chord — the terminal was effectively unusable
+without a desktop keyboard. F1–F6 stay as aliases, and the account search
+therefore does **not** accept digits. The perf overlay also lives on F3; it is
 suppressed while the terminal is up for exactly that reason.
+
+### 3a. A call docks under the terminal. It does not get hidden behind it.
+
+The terminal used to take the whole screen, including the conversation the
+tutorial was waiting on: the player was told to do something by a voice they
+could no longer read. A live call now renders **below** the terminal frame
+(`#cabinet.in-terminal`), and the terminal reserves room for it.
+
+That puts two panels on screen that both want the arrow keys, so **they take
+turns and the owner is visible**:
+
+* a new set of replies takes the keys (`CallUI.showChoices`) — somebody is
+  waiting;
+* anything that works the terminal — a screen key, a row, a tab, the mouse —
+  hands them back (`callUI.setFocused(false)`);
+* the telephone key (`answer`) fetches them to the caller.
+
+The unfocused panel dims and its key line changes to say how to get back. Do
+not add a third thing that wants the arrow keys without deciding where it sits
+in that order.
+
+Inside the account search, letters are letters: `F`, `H` and `X` type instead
+of working the phone, because a name with an F in it has to be typeable. Pad
+buttons are unambiguous and always work.
+
+## 3b. Every binding lives in `engine/controls.js`
+
+One table, `ACTIONS`. Each entry lists the keys it answers to, where it sits
+under the standard gamepad mapping, and what to print for it on a keyboard, an
+Xbox pad and a PlayStation pad.
+
+* **A pad button is a key.** `input.js` folds button presses into the same
+  held-key set (`PadA`, `PadUp`, `PadRT`…), so game code never branches on
+  whether a controller exists. Only `controls.js` and `input.js` know.
+* **Never print a key name as a literal.** Ask `label(action, scheme)`, or
+  write `{action}` in a string and run it through `expand()`. Tutorial hints do
+  exactly that, which is why "press H, then H again" becomes "press X, then X
+  again" the moment a pad is plugged in. A literal `'H'` in a UI string is a
+  bug on a controller.
+* **Losing the pointer lock is reported, never acted on.** Pausing on unlock is
+  what produced the pause-menu loop: leaving the terminal re-requests the lock,
+  Chrome denies it for about a second after an exit, the denial looked like the
+  player asking for their cursor back, and closing the menu requested it again.
+  The HUD says `CLICK TO LOOK AROUND` instead. `tools/controls.mjs` asserts the
+  loop stays dead.
+* **Auto-repeat does not reach the game.** Only `REPEATABLE` keys (text
+  editing, arrows) are forwarded while held; a held `Esc` used to toggle the
+  pause menu dozens of times a second.
 
 ## 4. Dialogue is data. Always.
 
@@ -262,17 +313,18 @@ been designed wrong.**
 
 ## 8. Testing
 
-**Do not assume code works because it looks correct.** Four harnesses exist and
-all of them have caught real bugs:
+**Do not assume code works because it looks correct.** These harnesses exist
+and all of them have caught real bugs:
 
 | | |
 |---|---|
 | `node tools/calls.mjs` | static validation, no browser. Run it on every dialogue change. |
 | `node tools/boot.mjs` | boots the real game headless and fails on any console error |
 | `node tools/soak.mjs` | runs **every call script to completion on three different reply strategies** — this is what catches dead ends and infinite loops |
-| `node tools/playthrough.mjs` | drives a whole shift with real key events and asserts 23 things about the result |
+| `node tools/playthrough.mjs` | drives a whole shift with real key events and asserts 29 things about the result |
 | `node tools/audio.mjs` | taps the audio buses and measures RMS, spectral balance and voice-chain leaks |
-| `node tools/tutorial.mjs` | plays the handover call and asserts every `waitFor` gate opens on the right action |
+| `node tools/tutorial.mjs` | plays the handover call and asserts every `waitFor` gate opens on the right action, that the call stays readable inside the terminal, and that every instruction reaches the screen with real key names |
+| `node tools/controls.mjs` | key routing: the number row, the arrow-key handover between a docked call and the terminal, pad buttons through the same path `input.js` uses, and the pause-menu loop |
 | `node tools/perf.mjs` | lights, draw calls and render target at each quality preset |
 | `npm run check` | all of the above except perf and shots |
 | `npm run shots` | captures the game at 20 moments, so visual regressions are visible |

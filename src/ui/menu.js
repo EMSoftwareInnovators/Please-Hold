@@ -4,13 +4,16 @@
    Kept away from the game systems entirely: it takes a set of
    callbacks and calls them. Nothing in src/game/ imports this.
    ============================================================ */
+import { label as controlLabel, isAction } from '../engine/controls.js';
+
 const $ = (id) => document.getElementById(id);
 
 export class Menu {
-  constructor({ settings, actions, save }) {
+  constructor({ settings, actions, save, input }) {
     this.settings = settings;
     this.actions = actions;           // { start, continue, resume, quitToTitle, applySettings }
     this.save = save;
+    this.input = input;
     this.el = {
       title: $('title'),
       menu: $('title-menu'),
@@ -60,21 +63,32 @@ export class Menu {
   }
 
   /* ---------------- keyboard ---------------- */
+  /* Everything here asks the binding table rather than testing key names, so
+     a d-pad drives the menus exactly as the arrow keys do. */
   handleKey(e) {
     if (this.open === 'panel') {
-      if (e.key === 'Escape' || e.key === 'Enter') { this.closePanel(); return true; }
+      if (isAction('cancel', e) || isAction('select', e) || e.code === 'PadStart') {
+        this.closePanel(); return true;
+      }
+      // The how-to is longer than the panel, and a pad has no scroll wheel.
+      if (isAction('down', e)) { this._scrollPanel(1); return true; }
+      if (isAction('up', e)) { this._scrollPanel(-1); return true; }
       return this.panelKind === 'options' ? this._optionsKey(e) : true;
     }
     if (this.open !== 'title') return false;
     const items = [...this.el.menu.children];
-    if (e.key === 'ArrowDown') { this.sel = (this.sel + 1) % items.length; this._paint(); return true; }
-    if (e.key === 'ArrowUp') { this.sel = (this.sel - 1 + items.length) % items.length; this._paint(); return true; }
-    if (e.key === 'Enter') {
+    if (isAction('down', e)) { this.sel = (this.sel + 1) % items.length; this._paint(); return true; }
+    if (isAction('up', e)) { this.sel = (this.sel - 1 + items.length) % items.length; this._paint(); return true; }
+    if (isAction('select', e)) {
       const li = items[this.sel];
       if (li && !li.classList.contains('disabled')) this.activate(li.dataset.act);
       return true;
     }
     return false;
+  }
+
+  _scrollPanel(dir) {
+    this.el.body.scrollTop += dir * Math.max(80, this.el.body.clientHeight * 0.5);
   }
 
   _optionsKey() { return true; }
@@ -92,7 +106,9 @@ export class Menu {
   /* ---------------- panels ---------------- */
   panel(kind, html) {
     this.panelKind = kind;
-    this.el.body.innerHTML = html + `<p class="close">ESC to close</p>`;
+    const back = controlLabel('cancel', this.input ? this.input.scheme : 'kbm');
+    this.el.body.innerHTML = html + `<p class="close">${back} to close</p>`;
+    this.el.body.scrollTop = 0;
     this.el.panel.classList.remove('hidden');
     this.open = 'panel';
   }
@@ -105,6 +121,15 @@ export class Menu {
   }
 
   howto() {
+    /* The panel names actions, not keys, so it prints W/E/H on a keyboard and
+       the right face buttons on whatever pad is plugged in. */
+    const scheme = this.input ? this.input.scheme : 'kbm';
+    const pad = scheme !== 'kbm';
+    const g = (a) => controlLabel(a, scheme);
+    const rows = (list) => list
+      .filter(([k]) => k)
+      .map(([k, what]) => `<dt>${k}</dt><dd>${what}</dd>`).join('');
+
     this.panel('howto', `
       <h2>HOW TO WORK THE DESK</h2>
       <p>You are the overnight dispatcher at the District Operations Center. There is a
@@ -112,33 +137,45 @@ export class Menu {
 
       <h3>MOVING</h3>
       <dl>
-        <dt>W A S D</dt><dd>walk</dd>
-        <dt>MOUSE</dt><dd>look</dd>
-        <dt>SHIFT</dt><dd>move quickly</dd>
-        <dt>E</dt><dd>use what you are looking at</dd>
-        <dt>Q</dt><dd>stand up from the desk</dd>
+        ${rows([
+          [pad ? 'LEFT STICK' : 'W A S D', 'walk'],
+          [pad ? 'RIGHT STICK' : 'MOUSE', 'look'],
+          [g('run'), 'move quickly'],
+          [g('use'), 'use what you are looking at'],
+          [g('stand'), 'stand up from the desk'],
+        ])}
       </dl>
+      ${pad ? '' : '<p>Click the window to look around &mdash; the browser only lets the game '
+        + 'have the mouse after a click, and the screen says so until it does.</p>'}
 
       <h3>THE TELEPHONE</h3>
       <dl>
-        <dt>F</dt><dd>answer the ringing line</dd>
-        <dt>1 - 4</dt><dd>choose a reply</dd>
-        <dt>H</dt><dd>put the caller on hold</dd>
-        <dt>X</dt><dd>hang up</dd>
+        ${rows([
+          [g('answer'), 'answer the ringing line, or turn back to the caller'],
+          [`${g('nav')} + ${g('select')}`, 'choose a reply and say it'],
+          [pad ? '' : '1 - 4', 'reply directly'],
+          [g('hold'), 'put the caller on hold'],
+          [g('hangup'), 'hang up'],
+        ])}
       </dl>
       <p>A caller on hold is still there, and still counting. Some of them will wait a
       long time. Some of them will not.</p>
 
       <h3>THE TERMINAL</h3>
       <dl>
-        <dt>T</dt><dd>lean in to the CRT / step back</dd>
-        <dt>F1 - F6</dt><dd>menu, accounts, tickets, map, dispatch, log</dd>
-        <dt>ARROWS</dt><dd>move the selection</dd>
-        <dt>RETURN</dt><dd>search, open, assign</dd>
-        <dt>N</dt><dd>open a new trouble ticket</dd>
+        ${rows([
+          [g('terminal'), 'lean in to the CRT / step back'],
+          [g('screens'), 'menu, accounts, tickets, map, dispatch, log'],
+          [g('nav'), 'move the selection'],
+          [g('select'), 'search, open, assign'],
+          [pad ? '' : 'N', 'open a new trouble ticket'],
+        ])}
       </dl>
       <p>Look people up before you confirm anything to them. Several replies are only
       available once you have actually read the account &mdash; that is deliberate.</p>
+      <p>A call carries on underneath the terminal so you can read it while you work.
+      A new reply takes the ${pad ? 'D-PAD' : 'ARROW KEYS'}; touching a screen or a row
+      gives them back to the terminal; <b>${g('answer')}</b> turns you back to the caller.</p>
 
       <h3>THE JOB</h3>
       <p>Take the call. Get the service address and confirm it against the account, not

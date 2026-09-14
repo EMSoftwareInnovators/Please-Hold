@@ -7,14 +7,16 @@
    HUD can be redesigned without touching a single system.
    ============================================================ */
 import { bus, EVENTS } from '../engine/bus.js';
+import { label as controlLabel } from '../engine/controls.js';
 import { LINE_STATE } from '../game/phone.js';
 
 const $ = (id) => document.getElementById(id);
 
 export class HUD {
-  constructor({ clock, settings }) {
+  constructor({ clock, settings, input }) {
     this.clock = clock;
     this.settings = settings;
+    this.input = input;
     this.el = {
       root: $('hud'),
       prompt: $('prompt'),
@@ -26,6 +28,7 @@ export class HUD {
       radioText: $('radio-text'),
       toasts: $('toasts'),
       objective: $('objective'),
+      lockhint: $('lockhint'),
       reticle: $('reticle'),
       perf: $('perf'),
     };
@@ -40,7 +43,8 @@ export class HUD {
   _wire() {
     bus.on('ui:prompt', (p) => {
       if (!p) { this.el.prompt.textContent = ''; return; }
-      this.el.prompt.innerHTML = `<b>E</b>${escapeHtml(p.verb)} ${escapeHtml(p.label)}`;
+      const key = controlLabel('use', this.input ? this.input.scheme : 'kbm');
+      this.el.prompt.innerHTML = `<b>${escapeHtml(key)}</b>${escapeHtml(p.verb)} ${escapeHtml(p.label)}`;
     });
 
     bus.on(EVENTS.MINUTE, () => this.updateClock());
@@ -97,6 +101,16 @@ export class HUD {
 
   /** The one line telling the player what to do. `pulse` for things the
    *  game is actively waiting on, so it is not mistaken for flavour text. */
+  /**
+   * The mouse is loose. Losing the pointer lock used to pause the game, which
+   * is what produced the pause-menu loop; now it is simply reported, and the
+   * player gets it back by clicking. A pad never needs this.
+   */
+  setLockHint(on) {
+    if (!this.el.lockhint) return;
+    this.el.lockhint.classList.toggle('hidden', !on);
+  }
+
   setObjective(text, pulse = false) {
     this.el.objective.textContent = text || '';
     this.el.objective.classList.toggle('pulse', !!text && pulse);

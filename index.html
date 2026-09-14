@@ -39,26 +39,8 @@
     <div id="radio-strip"><span id="radio-from"></span><span id="radio-text"></span></div>
     <div id="toasts"></div>
     <div id="objective"></div>
+    <div id="lockhint" class="hidden">CLICK TO LOOK AROUND</div>
     <pre id="perf" class="hidden"></pre>
-  </div>
-
-  <!-- ============ CALL PANEL ============ -->
-  <div id="call" class="layer hidden">
-    <div id="call-head">
-      <span id="call-who">CALLER</span>
-      <span id="call-meta"></span>
-    </div>
-    <div id="call-body">
-      <p id="call-stage"></p>
-      <p id="call-text"></p>
-    </div>
-    <ul id="call-choices"></ul>
-    <div id="call-keys">
-      <span><b>1-4</b> reply</span>
-      <span><b>H</b> hold</span>
-      <span><b>X</b> hang up</span>
-      <span><b>T</b> terminal</span>
-    </div>
   </div>
 
   <!-- ============ TERMINAL ============
@@ -82,6 +64,24 @@
       </div>
       <div id="crt-glass"></div>
     </div>
+  </div>
+
+  <!-- ============ CALL PANEL ============
+       Deliberately after the terminal in the document: a call has to be
+       readable while the player is working the CRT, or a conversation that
+       asks them to go and do something becomes unreadable the moment they
+       go and do it. -->
+  <div id="call" class="layer hidden">
+    <div id="call-head">
+      <span id="call-who">CALLER</span>
+      <span id="call-meta"></span>
+    </div>
+    <div id="call-body">
+      <p id="call-stage"></p>
+      <p id="call-text"></p>
+    </div>
+    <ul id="call-choices"></ul>
+    <div id="call-keys"></div>
   </div>
 
   <!-- ============ TITLE / MENU ============ -->

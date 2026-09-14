@@ -44,13 +44,17 @@ export const SCREENS = {
   LOG: 'LOG',
 };
 
+/* Screens are on the NUMBER row, not the function row: on most laptops F1-F6
+   need an Fn chord, which made the terminal unusable without a desktop
+   keyboard. F1-F6 still work for anyone who has them, and a pad gets the
+   shoulder buttons. */
 export const TABS = [
-  { key: 'F1', screen: SCREENS.MENU, label: 'MENU' },
-  { key: 'F2', screen: SCREENS.ACCOUNT, label: 'ACCOUNTS' },
-  { key: 'F3', screen: SCREENS.OUTAGE, label: 'TICKETS' },
-  { key: 'F4', screen: SCREENS.MAP, label: 'MAP' },
-  { key: 'F5', screen: SCREENS.DISPATCH, label: 'UNITS' },
-  { key: 'F6', screen: SCREENS.LOG, label: 'LOG' },
+  { key: '1', screen: SCREENS.MENU, label: 'MENU' },
+  { key: '2', screen: SCREENS.ACCOUNT, label: 'ACCOUNTS' },
+  { key: '3', screen: SCREENS.OUTAGE, label: 'TICKETS' },
+  { key: '4', screen: SCREENS.MAP, label: 'MAP' },
+  { key: '5', screen: SCREENS.DISPATCH, label: 'UNITS' },
+  { key: '6', screen: SCREENS.LOG, label: 'LOG' },
 ];
 
 const CAUSES = ['UNKNOWN', 'FUSE', 'TREE ON LINE', 'SERVICE DROP', 'WIRE DOWN', 'BROKEN POLE', 'TRANSFORMER'];
@@ -174,7 +178,7 @@ export class Terminal {
         id: `menu:${tab.screen}`,
         sel: this.cursor === i,
         cw: COLS.menu,
-        cols: [tab.key, tab.label],
+        cols: [`[${tab.key}]`, tab.label],
         sub: {
           ACCOUNTS: 'search by account, name, telephone or address',
           TICKETS: 'open, review and create outage reports',
@@ -191,7 +195,7 @@ export class Terminal {
     return {
       title: 'MAIN MENU',
       rows,
-      keys: [['▴ ▾', 'select'], ['RETURN', 'open'], ['F1–F6', 'jump to a screen']],
+      keys: [['nav', 'select'], ['select', 'open'], ['screens', 'jump to a screen']],
     };
   }
 
@@ -222,8 +226,8 @@ export class Terminal {
       title: 'CUSTOMER ACCOUNT INQUIRY',
       rows,
       keys: this.results.length
-        ? [['▴ ▾', 'select'], ['RETURN', 'open record'], ['type', 'new search']]
-        : [['type', 'a query'], ['RETURN', 'search']],
+        ? [['nav', 'select'], ['select', 'open record'], [null, 'type to search again']]
+        : [[null, 'type a name, number or street'], ['select', 'search']],
     };
   }
 
@@ -250,7 +254,7 @@ export class Terminal {
     return {
       title: 'ACCOUNT RECORD',
       rows,
-      keys: [['N', 'open a ticket for this account'], ['ESC', 'back to results']],
+      keys: [['newTicket', 'open a ticket for this account'], ['cancel', 'back to results']],
     };
   }
 
@@ -277,7 +281,7 @@ export class Terminal {
     return {
       title: 'TROUBLE TICKET FILE',
       rows,
-      keys: [['▴ ▾', 'select'], ['RETURN', 'assign a unit'], ['N', 'new ticket']],
+      keys: [['nav', 'select'], ['select', 'assign a unit'], ['newTicket', 'new ticket']],
     };
   }
 
@@ -303,7 +307,7 @@ export class Terminal {
     return {
       title: 'NEW TROUBLE TICKET',
       rows,
-      keys: [['▴ ▾', 'cause'], ['H', 'toggle hazard'], ['RETURN', 'open ticket'], ['ESC', 'cancel']],
+      keys: [['nav', 'cause'], ['hazard', 'toggle hazard'], ['select', 'open ticket'], ['cancel', 'cancel']],
     };
   }
 
@@ -314,7 +318,7 @@ export class Terminal {
     if (ghosts.length) rows.push(row('warn', { t: `UNRECOGNIZED CIRCUIT ID ON DISPLAY: ${ghosts.join(', ')}` }));
     rows.push(row('kv', { label: 'CIRCUITS OUT', value: String(affected.size) }));
     rows.push(row('kv', { label: 'METERS OUT', value: String(this.sys.outages.customersOut()) }));
-    return { title: 'SERVICE AREA DISPLAY', rows, keys: [['F3', 'the ticket list']] };
+    return { title: 'SERVICE AREA DISPLAY', rows, keys: [['screens', 'other screens']] };
   }
 
   _dispatch() {
@@ -331,7 +335,7 @@ export class Terminal {
           good: c.status === CREW_STATUS.AVAILABLE,
         }));
       }
-      return { title: 'UNIT ASSIGNMENT', rows, keys: [['F3', 'the ticket list']] };
+      return { title: 'UNIT ASSIGNMENT', rows, keys: [['screens', 'other screens']] };
     }
 
     rows.push(row('kv', { label: 'TICKET', value: `${ticket.id}   ${ticket.feeder}` }));
@@ -360,7 +364,7 @@ export class Terminal {
     return {
       title: 'UNIT ASSIGNMENT',
       rows,
-      keys: [['▴ ▾', 'select a unit'], ['RETURN', 'dispatch'], ['TAB', 'next ticket']],
+      keys: [['nav', 'select a unit'], ['select', 'dispatch'], [null, 'TAB for the next ticket']],
     };
   }
 
@@ -380,7 +384,14 @@ export class Terminal {
         }));
       }
     }
-    return { title: 'SHIFT LOG', rows, keys: [['▴ ▾', 'scroll']] };
+    return { title: 'SHIFT LOG', rows, keys: [['nav', 'scroll']] };
+  }
+
+  /** Shoulder buttons walk the tab strip. */
+  stepScreen(delta) {
+    const i = TABS.findIndex((t) => t.screen === this.screen);
+    const next = TABS[Math.max(0, Math.min(TABS.length - 1, (i < 0 ? 0 : i) + delta))];
+    if (next && next.screen !== this.screen) this.go(next.screen);
   }
 
   /** The selectable rows of the current screen, in order. */
@@ -394,9 +405,6 @@ export class Terminal {
     const k = e.key;
     this.dirty = true;
     if (this.sys.audio) this.sys.audio.play('keyClack', { volume: 0.45 });
-
-    const tab = TABS.find((t) => t.key === k);
-    if (tab) { this.go(tab.screen); return true; }
 
     if (k === 'Escape') {
       if (this.record) { this.record = null; return true; }
@@ -441,9 +449,12 @@ export class Terminal {
     }
   }
 
+  /* Digits are screen keys now, so the search box does not take them. Names,
+     streets and the letter part of an account number all still work, which is
+     what people actually type. */
   _typing(k) {
     if (k === 'Backspace') { this.input = this.input.slice(0, -1); return true; }
-    if (k.length === 1 && /[\w\s\-.,#]/.test(k)) {
+    if (k.length === 1 && /[A-Za-z\s\-.,#]/.test(k)) {
       this.input = (this.input + k).toUpperCase().slice(0, 40);
       return true;
     }

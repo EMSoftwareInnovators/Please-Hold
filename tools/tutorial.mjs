@@ -35,7 +35,13 @@ await page.evaluate(() => {
   const g = window.__game;
   g.director.minGapSeconds = 0.05;
   window.__hints = [];
-  window.__bus.on(window.__events.WAITING, ({ hint }) => { if (hint) window.__hints.push(hint); });
+  window.__shown = [];
+  window.__bus.on(window.__events.WAITING, ({ hint }) => {
+    if (!hint) return;
+    window.__hints.push(hint);
+    // What the player actually reads, after the control names are filled in.
+    setTimeout(() => window.__shown.push(document.getElementById('objective').textContent), 40);
+  });
 });
 
 /** Run the conversation forward until it blocks on a gate, or ends. */
@@ -84,7 +90,7 @@ await page.waitForTimeout(400);
 /* --- gate 3: look somebody up --- */
 let g3 = await runToGate();
 check('opening the terminal satisfies gate 2', g3.gate === 'wait_lookup', JSON.stringify(g3));
-await page.keyboard.press('F2');
+await page.keyboard.press('2');
 for (const ch of 'PRZ') await page.keyboard.press(ch);
 await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
@@ -96,7 +102,7 @@ check('the search she suggests actually finds somebody',
 /* --- gate 4: write a ticket --- */
 let g4 = await runToGate();
 check('a lookup satisfies gate 3', g4.gate === 'wait_ticket', JSON.stringify(g4));
-await page.keyboard.press('F3');
+await page.keyboard.press('3');
 await page.keyboard.press('n');
 await page.waitForTimeout(250);
 await page.keyboard.press('ArrowDown');
@@ -116,17 +122,63 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(400);
 
-/* --- gate 6: the hold button --- */
+/* --- gate 6: the hold button, WITHOUT leaving the terminal ---
+   This is the thing that was broken: the call kept running while the player
+   followed the instructions and there was no way to read it. */
 let g6 = await runToGate();
 check('a dispatch satisfies gate 5', g6.gate === 'wait_hold', JSON.stringify(g6));
-await page.evaluate(() => window.__game.focusTerminal(false));
+check('still in the terminal for the whole tutorial',
+  await page.evaluate(() => window.__game.terminalFocused));
+
+const docked = await page.evaluate(() => {
+  const crt = document.getElementById('crt').getBoundingClientRect();
+  const head = document.getElementById('call-head').getBoundingClientRect();
+  const text = document.getElementById('call-text');
+  const frame = document.getElementById('crt-frame').getBoundingClientRect();
+  return {
+    callVisible: !document.getElementById('call').classList.contains('hidden'),
+    text: (text.textContent || '').slice(0, 40),
+    callBelowFrame: head.top >= frame.bottom - 2,
+    onScreen: head.top >= 0 && head.bottom <= crt.bottom + 2,
+  };
+});
+check('the call is readable while in the terminal', docked.callVisible && docked.text.length > 0, docked.text);
+check('the call docks below the terminal rather than over it', docked.callBelowFrame && docked.onScreen, JSON.stringify(docked));
+
 await page.keyboard.press('h');
 await page.waitForTimeout(500);
 const held = await page.evaluate(() => window.__game.phone.held.length);
 await page.keyboard.press('h');
 await page.waitForTimeout(500);
-check('holding the supervisor and coming back works', held === 1
+check('H holds and resumes from inside the terminal', held === 1
   && (await page.evaluate(() => window.__game.phone.activeLine !== null)));
+
+/* --- replies can be taken from inside the terminal --- */
+await page.evaluate(async () => {
+  const g = window.__game;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < 200 && !g.callUI.choices.length && g.runner.active; i++) {
+    if (g.callUI.visible && g.callUI._timer > 0) {
+      g.callUI._timer = 0;
+      if (g.callUI._pendingPlayerLine) { g.callUI._pendingPlayerLine = false; g.runner.playerLineFinished(); }
+      else g.runner.lineFinished();
+    }
+    await sleep(6);
+  }
+});
+const beforePick = await page.evaluate(() => window.__game.callUI.choices.length);
+if (beforePick) {
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(150);
+  const moved = await page.evaluate(() => window.__game.callUI.sel);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => window.__game.callUI.choices.length);
+  check('arrows and RETURN answer the caller from inside the terminal',
+    moved === 1 && after === 0, `sel ${moved}, choices after ${after}`);
+} else {
+  check('arrows and RETURN answer the caller from inside the terminal', false, 'no choices appeared');
+}
 
 /* --- and out --- */
 const fin = await runToGate();
@@ -136,14 +188,23 @@ const out = await page.evaluate(() => ({
   beat: window.__game.gameState.beat,
   done: window.__game.gameState.has('tutorial_done'),
   hints: window.__hints,
+  shown: window.__shown,
   nextUp: window.__game.director.beatDue().map((c) => c.id),
 }));
 console.log('\nhints shown to the player:');
-for (const h of out.hints) console.log('   ' + h);
+for (const h of out.shown) console.log('   ' + h);
 console.log('');
 check('the tutorial hands off to the shift', out.done && out.beat >= 1, `beat ${out.beat}`);
 check('the first real call is queued behind it', out.nextUp.includes('merrick_01'), out.nextUp.join(','));
 check('every gate showed an instruction', out.hints.length === 6, `${out.hints.length} hints`);
+/* The script writes `{hold}`; the player must read "H". A token that reaches
+   the screen is worse than no hint at all. */
+const unresolved = out.shown.filter((h) => /[{}]/.test(h));
+check('every instruction reached the screen with real key names',
+  out.shown.length === out.hints.length && unresolved.length === 0,
+  unresolved[0] || `${out.shown.length} of ${out.hints.length} shown`);
+const fkeys = out.shown.filter((h) => /\bF[1-9]\b/.test(h));
+check('no instruction asks for a function key', fkeys.length === 0, fkeys[0] || '');
 check('no runtime errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
 await browser.close();

@@ -18,6 +18,7 @@ import { PRESETS, PRESET_ORDER, guessPreset } from '../engine/quality.js';
 import { MaterialLibrary } from '../engine/materials.js';
 import { AudioEngine } from '../engine/audio.js';
 import { Input, MODE } from '../engine/input.js';
+import { label as controlLabel, expand as controlText, isAction } from '../engine/controls.js';
 import { bus, EVENTS } from '../engine/bus.js';
 
 import { Office } from '../world/office.js';
@@ -46,7 +47,7 @@ import { HorrorDirector } from './horror.js';
 import { Player } from './player.js';
 import { InteractionSystem } from './interaction.js';
 
-import { Terminal, SCREENS } from '../ui/terminal.js';
+import { Terminal, SCREENS, TABS } from '../ui/terminal.js';
 import { TerminalView } from '../ui/terminalview.js';
 import { HUD } from '../ui/hud.js';
 import { CallUI } from '../ui/callui.js';
@@ -64,6 +65,10 @@ export class Game {
     this.settings = new Settings();
     this.time = 0;
     this.terminalFocused = false;
+    /** What a waiting conversation wants the player to do, with `{action}`
+        tokens still in it; `_applyHint()` turns it into readable keys. */
+    this.objectiveHint = null;
+    this._hintScheme = 'kbm';
     this.radioCall = null;
     this._last = 0;
     this._accum = 0;
@@ -216,13 +221,14 @@ export class Game {
 
     /* ---- presentation ---- */
     this.input = new Input(canvas);
-    this.hud = new HUD({ clock: this.clock, settings: this.settings });
+    this.hud = new HUD({ clock: this.clock, settings: this.settings, input: this.input });
     this.callUI = new CallUI({
-      runner: this.runner, audio: this.audio, settings: this.settings, phone: this.phone,
+      runner: this.runner, audio: this.audio, settings: this.settings,
+      phone: this.phone, input: this.input,
     });
     this.save = new SaveSystem(this);
     this.menu = new Menu({
-      settings: this.settings, save: this.save,
+      settings: this.settings, save: this.save, input: this.input,
       actions: {
         start: () => this.startShift(),
         continue: () => this.startShift({ load: true }),
@@ -241,7 +247,8 @@ export class Game {
     crt.userData.screenMaterial.emissiveIntensity = 0.78;
     crt.userData.screenMaterial.needsUpdate = true;
     this._screenTexture = tex;
-    this.terminalView = new TerminalView(this.terminal, this.clock);
+    this.terminalView = new TerminalView(this.terminal, this.clock, this.input);
+    this.terminalView.onInteract = () => this.callUI.setFocused(false);
 
     this._wireEvents();
     this._wireKeys();
@@ -348,20 +355,19 @@ export class Game {
 
     bus.on(EVENTS.BEAT, ({ beat }) => {
       this.hud.toast(`—`);
-      if (beat === 2) this.hud.setObjective('');
+      if (beat === 2) { this.objectiveHint = null; this._applyHint(); }
     });
 
     bus.on(EVENTS.RING, () => {
       if (!this.player.seated) this.hud.setObjective('THE PHONE IS RINGING', true);
     });
-    bus.on(EVENTS.ANSWERED, () => this.hud.setObjective(''));
+    bus.on(EVENTS.ANSWERED, () => { this.objectiveHint = null; this._applyHint(); });
 
     // A waitFor node is the conversation asking the player to do something.
     // Whatever it is waiting for goes on screen until they have done it.
     bus.on(EVENTS.WAITING, ({ hint }) => {
-      this.hud.setObjective(hint || '', !!hint);
-      if (hint) this.terminalView.hint = hint;
-      else this.terminalView.hint = null;
+      this.objectiveHint = hint || null;
+      this._applyHint();
     });
 
     bus.on(EVENTS.POWER, ({ level }) => {
@@ -373,13 +379,27 @@ export class Game {
     });
   }
 
+  /**
+   * A waiting conversation writes its instruction with `{action}` tokens, so
+   * the same line reads "press H, then H again" on a keyboard and "press X,
+   * then X again" on a pad. Re-run whenever the scheme changes underneath it.
+   */
+  _applyHint() {
+    const scheme = this.input.scheme;
+    this._hintScheme = scheme;
+    const text = this.objectiveHint ? controlText(this.objectiveHint, scheme) : '';
+    this.hud.setObjective(text, !!text);
+    this.terminalView.hint = text || null;
+  }
+
   _wireKeys() {
     this.input.onKey((e) => this.onKey(e));
-    this.input.onClick((c) => {
-      if (c.type === 'unlock' && this.state === STATE.PLAYING && !this.terminalFocused && this.menu.open === null) {
-        this.pause();
-      }
-    });
+    /* Losing the pointer lock is reported, never acted on. Pausing here is
+       what produced the pause-menu loop: leaving the terminal re-requests the
+       lock, Chrome denies it for about a second afterwards, the denial looked
+       like the player asking for their cursor back, and closing the menu
+       requested it again. The HUD now just says the mouse is loose. */
+    this.input.onClick(() => {});
   }
 
   /* ============================================================
@@ -396,42 +416,97 @@ export class Game {
 
     // The terminal takes the keyboard while the player is leaning into it.
     if (this.terminalFocused) {
-      // T always steps back, even mid-search: it is the one key that is
-      // guaranteed to get the player out of the terminal.
-      if (e.code === 'KeyT' && this.terminal.screen !== SCREENS.ACCOUNT) {
+      /* A caller waiting for a reply owns the selection keys. The terminal
+         keeps its number keys and the mouse, so the player can still move
+         between screens while somebody is mid-sentence -- but answering is
+         one press and does not compete with a list. */
+      if (this.callUI.choices.length && this.callUI.focused && this._routeChoiceKey(e)) {
+        e.preventDefault(); return;
+      }
+
+      // Screens are on 1-6 (F1-F6 still work), and the shoulder buttons.
+      const idx = this.input.screenIndex(e);
+      if (idx >= 0) { this.callUI.setFocused(false); this.terminal.go(TABS[idx].screen); e.preventDefault(); return; }
+      if (e.code === 'PadLB') { this.callUI.setFocused(false); this.terminal.stepScreen(-1); return; }
+      if (e.code === 'PadRB') { this.callUI.setFocused(false); this.terminal.stepScreen(1); return; }
+
+      // T, or the pad's view button, always steps back out.
+      if ((e.code === 'KeyT' && this.terminal.screen !== SCREENS.ACCOUNT) || e.code === 'PadSelect') {
         this.focusTerminal(false); e.preventDefault(); return;
       }
-      // F1-F6 belong to the terminal while it is focused. The perf overlay
-      // also lives on F3, and stealing it here sent the player to the perf
-      // readout instead of the ticket list.
-      // handleKey returns false only when ESC has nothing left to back out of.
-      if (this.terminal.handleKey(e)) { e.preventDefault(); return; }
-      if (e.key === 'Escape') { this.focusTerminal(false); return; }
+      if (e.code === 'PadStart') { this.pause(); return; }
+
+      /* Back out, one step at a time: an open record, then a draft, then the
+         menu screen, then the terminal itself. The terminal only understands
+         Escape, so the pad's B button is translated rather than special-cased
+         in two places. */
+      if (isAction('cancel', e)) {
+        if (!this.terminal.handleKey({ key: 'Escape', code: 'Escape' })) this.focusTerminal(false);
+        e.preventDefault(); return;
+      }
+
+      /* Telephone keys reach the player inside the terminal. The account
+         search is the one place they cannot: it is a text box, and a name
+         with an F in it has to be typeable. Everywhere else F, H and X are
+         the telephone, and a pad button is unambiguous anywhere. */
+      const typing = this.terminal.screen === SCREENS.ACCOUNT && !this.terminal.record;
+      if (e.code === 'PadY' || (e.code === 'KeyF' && !typing)) {
+        // Ringing means answer it. Otherwise F is how the player turns back
+        // to a caller who is waiting on a reply.
+        if (this.phone.anyRinging || this.phone.held.length) this.answer();
+        else if (this.callUI.choices.length) this.callUI.setFocused(true);
+        e.preventDefault(); return;
+      }
+      if (e.code === 'PadX'
+        || (e.code === 'KeyH' && !typing && !this.terminal.draft
+            && (this.phone.activeLine != null || this.phone.held.length))) {
+        this.toggleHold(); return;
+      }
+      if (e.code === 'PadRT' || (e.code === 'KeyX' && !typing && this.phone.activeLine != null)) {
+        this.hangUp(); return;
+      }
+
+      /* Anything that gets this far is the player working the terminal, so
+         the terminal keeps the arrow keys until a caller asks something new
+         or the player presses the telephone key above. */
+      if (e.code !== 'Escape' && e.code !== 'PadB') this.callUI.setFocused(false);
+
+      if (this.terminal.handleKey(e)) e.preventDefault();
       return;
     }
 
+    if (this.callUI.choices.length && this._routeChoiceKey(e)) { e.preventDefault(); return; }
+
     switch (e.code) {
       case 'F3': this.hud.togglePerf(); e.preventDefault(); break;
-      case 'Escape': this.pause(); break;
-      case 'KeyF': this.answer(); break;
-      case 'KeyH': this.toggleHold(); break;
-      case 'KeyX': this.hangUp(); break;
-      case 'KeyQ': if (this.player.seated) this.player.stand(); break;
-      case 'KeyT': this.focusTerminal(true); break;
-      case 'KeyE': this.interaction.activate(); break;
-      case 'Enter':
-        if (this.callUI.choices.length) this.callUI.pick();
-        else this.interaction.activate();
-        break;
-      case 'ArrowUp': if (this.callUI.choices.length) { this.callUI.move(-1); e.preventDefault(); } break;
-      case 'ArrowDown': if (this.callUI.choices.length) { this.callUI.move(1); e.preventDefault(); } break;
-      case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': {
-        const i = Number(e.code.slice(5)) - 1;
-        if (this.callUI.choices.length > i) this.callUI.pick(i);
-        break;
-      }
+      case 'Escape': case 'PadStart': this.pause(); break;
+      case 'KeyF': case 'PadY': this.answer(); break;
+      case 'KeyH': case 'PadX': this.toggleHold(); break;
+      case 'KeyX': case 'PadRT': this.hangUp(); break;
+      case 'KeyQ': case 'PadL3': if (this.player.seated) this.player.stand(); break;
+      case 'KeyT': case 'PadSelect': this.focusTerminal(true); break;
+      case 'KeyE': case 'Enter': case 'PadA': this.interaction.activate(); break;
       default: break;
     }
+  }
+
+  /**
+   * Selection keys for a pending reply. Up/down move, confirm takes it, and
+   * outside the terminal the number row is a shortcut -- inside, the numbers
+   * belong to the terminal's screens, so they are not offered there.
+   */
+  _routeChoiceKey(e) {
+    switch (e.code) {
+      case 'ArrowUp': case 'PadUp': this.callUI.move(-1); return true;
+      case 'ArrowDown': case 'PadDown': this.callUI.move(1); return true;
+      case 'Enter': case 'PadA': this.callUI.pick(); return true;
+      default: break;
+    }
+    if (!this.terminalFocused && /^Digit[1-6]$/.test(e.code)) {
+      const i = Number(e.code.slice(5)) - 1;
+      if (this.callUI.choices.length > i) { this.callUI.pick(i); return true; }
+    }
+    return false;
   }
 
   /* ============================================================
@@ -488,6 +563,11 @@ export class Game {
     this.terminalView.show(on);
     this.hud.show(!on);
     this.hud.setReticle(!on);
+    document.getElementById('cabinet').classList.toggle('in-terminal', on);
+    this.callUI.setDocked(on);
+    // Out in the room the panel is the only thing on screen, so it always has
+    // the keys; docked, it starts with them and gives them up on first touch.
+    this.callUI.setFocused(true);
     this.setMode(on ? 'ui' : 'world');
     if (on) {
       this.gameState.set('used_terminal', true);
@@ -607,6 +687,14 @@ export class Game {
     this.time += dt;
 
     this.renderer.resize();
+    this.input.poll(dt);
+    this.input.flushPadKeys((ev) => this.onKey(ev));
+    /* The mouse being loose is reported, not acted on: it is the whole reason
+       the pause menu used to loop. A pad does not need the pointer at all. */
+    this.hud.setLockHint(this.state === STATE.PLAYING && !this.terminalFocused
+      && this.input.scheme === 'kbm' && this.input.needsClickToLook);
+    // Plugging a pad in mid-sentence must not leave keyboard names on screen.
+    if (this.objectiveHint && this.input.scheme !== this._hintScheme) this._applyHint();
 
     if (this.state === STATE.PLAYING) {
       // input -> player
@@ -668,6 +756,7 @@ export class Game {
     if (this._screenTexture) this._screenTexture.needsUpdate = true;
     if (this.terminalFocused) this.terminalView.lineAlert = this._lineAlert();
     this.terminalView.update();
+    document.getElementById('cabinet').classList.toggle('on-call', this.callUI.visible);
 
     this.renderer.render(this.scene, this.time, frameMs);
     if (this.hud) this.hud.updatePerf(this.renderer, this.scene);

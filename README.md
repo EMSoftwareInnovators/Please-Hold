@@ -90,55 +90,88 @@ Press **F3** in game for live frame time, draw calls and light count.
 ### Tests
 
 ```bash
-npm run check        # validator, boot, audio, soak, playthrough
-node tools/calls.mjs # validate every call script (no browser needed)
-node tools/audio.mjs # measure the audio buses -- levels, balance, leaks
-node tools/perf.mjs  # lights, draw calls and render target per preset
-npm run shots        # capture screenshots to ./shots
+npm run check           # validator, boot, audio, soak, tutorial, controls, playthrough
+node tools/calls.mjs    # validate every call script (no browser needed)
+node tools/audio.mjs    # measure the audio buses -- levels, balance, leaks
+npm run check:tutorial  # play the handover call gate by gate
+npm run check:controls  # key routing, pointer lock, the pause-menu loop
+node tools/perf.mjs     # lights, draw calls and render target per preset
+npm run shots           # capture screenshots to ./shots
 ```
 
 ---
 
 ## Controls
 
+Every binding lives in one table, `src/engine/controls.js`. A gamepad button is
+folded into the same key set the rest of the game already reads, so nothing
+outside that file and `src/engine/input.js` knows a controller exists — and
+every key hint on screen prints itself in whatever the player is holding.
+
 ### Moving
-| Key | |
-|---|---|
-| `W A S D` | walk |
-| mouse | look |
-| `Shift` | move quickly |
-| `E` | use what you are looking at |
-| `Q` | stand up from the desk |
-| `Esc` | pause |
-| `F3` | frame time, draw calls, light count (outside the terminal) |
+| Keyboard | Pad | |
+|---|---|---|
+| `W A S D` | left stick | walk |
+| mouse | right stick | look |
+| `Shift` | `LT` / `L2` | move quickly |
+| `E` | `A` / `✕` | use what you are looking at |
+| `Q` | `L3` | stand up from the desk |
+| `Esc` | `Menu` / `Options` | pause |
+| `F3` | — | frame time, draw calls, light count (outside the terminal) |
+
+Click the window to look around: the browser only grants the mouse after a
+click, and the HUD says **CLICK TO LOOK AROUND** until it has one. Losing the
+pointer never pauses the game — that is what used to put the pause menu into a
+loop. A pad does not need the pointer at all.
 
 ### The telephone
-| Key | |
-|---|---|
-| `F` | answer the ringing line |
-| `1` – `4` | choose a reply |
-| `H` | put the caller on hold / return to a held caller |
-| `X` | hang up |
+| Keyboard | Pad | |
+|---|---|---|
+| `F` | `Y` / `△` | answer the ringing line, or return to the caller |
+| arrows + `Return` | d-pad + `A` / `✕` | choose a reply and say it |
+| `1` – `4` | — | reply directly (outside the terminal) |
+| `H` | `X` / `□` | put the caller on hold / return to a held caller |
+| `X` | `RT` / `R2` | hang up |
+
+Hanging up is on a trigger rather than a face button on purpose: it is the one
+action you must not press by accident.
 
 A caller on hold is still there and still counting. Some will wait a long time.
 Some will not, and they will remember.
 
 ### The terminal
-| Key | |
-|---|---|
-| `T` | sit down at the terminal / step back from it |
-| `F1` – `F6` | menu, accounts, tickets, map, units, log |
-| arrows | move the selection |
-| `Return` | search, open a record, assign a unit |
-| `N` | open a new trouble ticket |
-| `H` | (on a new ticket) mark it a hazard |
-| `Esc` | back one step |
-| mouse | click the tabs, click any row |
+| Keyboard | Pad | |
+|---|---|---|
+| `T` | `View` / `Share` | sit down at the terminal / step back from it |
+| `1` – `6` | `LB` / `RB` (`L1` / `R1`) | menu, accounts, tickets, map, units, log |
+| arrows | d-pad | move the selection |
+| `Return` | `A` / `✕` | search, open a record, assign a unit |
+| `N` | — | open a new trouble ticket |
+| `H` | — | (on a new ticket) mark it a hazard |
+| `Esc` | `B` / `○` | back one step |
+| mouse | — | click the tabs, click any row |
+
+The screens are on the number row, not `F1` – `F6`: most laptops put the
+function row behind an `Fn` chord, which made the terminal unusable without a
+desktop keyboard. `F1` – `F6` still work for anyone who has them.
 
 Using the computer is what sits you at it — you do not have to find the chair
 first. The terminal takes over the screen and locks the camera while you are
-in it; a ringing line shows in its status bar so you can still hear the phone
-with your head down.
+in it.
+
+### A call while you are in the terminal
+
+A live call docks under the terminal instead of covering it, so you can read
+the caller and work the screens at the same time. Two panels want the arrow
+keys, so they take turns, and the panel that has them says so:
+
+* a new reply takes the arrow keys, because somebody is waiting;
+* touching a screen, a row or a tab hands them to the terminal;
+* `F` (`Y` / `△`) fetches them back to the caller.
+
+The replies stay on screen and stay clickable the whole time. Inside the
+account search, letters are letters — `F`, `H` and `X` type rather than work
+the phone, because a name with an F in it has to be typeable.
 
 Several dialogue replies are only available once you have actually looked
 something up. That is deliberate: you cannot confirm a service address you have
@@ -172,7 +205,8 @@ not read.
 | Game clock | shift time, and events that can lie about it |
 | Save | checkpoint at every story beat |
 | UI | title, options, how-to, pause, HUD, call panel, a full-takeover CRT terminal that scales with the window, end-of-shift report |
-| Tutorial | `waitFor` dialogue nodes that hold a conversation until the player performs a real action, with an on-screen objective |
+| Tutorial | `waitFor` dialogue nodes that hold a conversation until the player performs a real action, with an on-screen objective that names the keys the player actually has |
+| Input | one binding table, keyboard and gamepad (Xbox / PlayStation button art chosen from the pad's own id), with every key hint on screen printed in whatever is plugged in |
 
 **The shift** — 14 call scripts, 238 nodes, 420 lines, 169 player replies:
 
@@ -202,8 +236,10 @@ not read.
 | the terminal: an account, with a medical alert | the terminal: who you can send, and who you cannot |
 | ![the map](docs/shots/12-terminal-map-outages.png) | ![the handover](docs/shots/12b-tutorial.png) |
 | the terminal: circuits with trouble | the handover call, waiting for you to do the thing |
-| ![1956](docs/shots/15-1956-call.png) | ![please hold](docs/shots/20-please-hold.png) |
-| a caller whose line does not sound like 1999 | the end of the slice |
+| ![a call in the terminal](docs/shots/12c-terminal-on-call.png) | ![1956](docs/shots/15-1956-call.png) |
+| a live call docked under the terminal, with the instruction it is waiting on | a caller whose line does not sound like 1999 |
+| ![the desk](docs/shots/05-seated.png) | ![please hold](docs/shots/20-please-hold.png) |
+| sat down, where most of the night happens | the end of the slice |
 
 ---
 
@@ -216,12 +252,13 @@ src/
   main.js             boot
   style.css           the interface
   vendor/             three.js r169 (vendored, unmodified)
-  engine/             renderer, postfx, materials, textures, noise, audio, input, bus
+  engine/             renderer, postfx, materials, textures, noise, audio,
+                      input, controls (every binding), quality, bus
   world/              plan, office builder, props, workstation, signage, lighting, weather, dress
   game/               clock, state, settings, save, player, interaction,
                       phone, dialogue, effects, calls, database, outages,
                       crews, dispatch, radio, horror, game
-  ui/                 hud, callui, terminal, menu
+  ui/                 hud, callui, terminal (state), terminalview (DOM), menu
   data/
     calls/            ONE FILE PER CONVERSATION  <- add dialogue here
     accounts.js       the customer master file

@@ -10,6 +10,7 @@
     "shots": "node tools/shots.mjs",
     "check:audio": "node tools/audio.mjs",
     "check:tutorial": "node tools/tutorial.mjs",
+    "check:controls": "node tools/controls.mjs",
     "check:perf": "node tools/perf.mjs",
     "app": "electron .",
     "dist": "electron-builder --publish never",

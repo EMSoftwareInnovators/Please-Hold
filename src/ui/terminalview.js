@@ -10,15 +10,17 @@
    bitmap. That is the entire reason this file exists.
    ============================================================ */
 import { TABS } from './terminal.js';
+import { label as controlLabel } from '../engine/controls.js';
 import { drawTerritory } from '../world/signage.js';
 import { escapeHtml } from './hud.js';
 
 const $ = (id) => document.getElementById(id);
 
 export class TerminalView {
-  constructor(terminal, clock) {
+  constructor(terminal, clock, input) {
     this.terminal = terminal;
     this.clock = clock;
+    this.input = input;
     this.el = {
       root: $('crt'),
       title: $('crt-title'),
@@ -33,6 +35,9 @@ export class TerminalView {
     this.lineAlert = null;
     /** Set by game.js: what a waiting conversation wants the player to do. */
     this.hint = null;
+    /** Set by game.js: called when the player works the terminal by hand, so
+        the arrow keys can move away from a docked call panel. */
+    this.onInteract = null;
     this.visible = false;
     this._sig = '';
     this._wire();
@@ -41,17 +46,23 @@ export class TerminalView {
   _wire() {
     this.el.tabs.addEventListener('click', (e) => {
       const b = e.target.closest('[data-screen]');
-      if (b) this.terminal.go(b.dataset.screen);
+      if (!b) return;
+      if (this.onInteract) this.onInteract();
+      this.terminal.go(b.dataset.screen);
     });
     // Hovering moves the selection, clicking activates it -- the same row
     // responds to the mouse and to the arrow keys, so neither feels bolted on.
     this.el.body.addEventListener('mousemove', (e) => {
       const r = e.target.closest('[data-id]');
-      if (r) this.terminal.select(r.dataset.id);
+      if (!r) return;
+      if (this.onInteract) this.onInteract();
+      this.terminal.select(r.dataset.id);
     });
     this.el.body.addEventListener('click', (e) => {
       const r = e.target.closest('[data-id]');
-      if (r) this.terminal.activate(r.dataset.id);
+      if (!r) return;
+      if (this.onInteract) this.onInteract();
+      this.terminal.activate(r.dataset.id);
     });
   }
 
@@ -72,6 +83,7 @@ export class TerminalView {
       t.dirty, this.clock.stamp(this.clock.displayMinutes),
       this.lineAlert ? `${this.lineAlert.kind}${this.lineAlert.text}` : '',
       this.hint || '',
+      this.input ? this.input.scheme : 'kbm',
     ].join('~');
     if (sig === this._sig) return;
     this._sig = sig;
@@ -102,9 +114,15 @@ export class TerminalView {
     this.el.body.innerHTML = view.rows.map((r) => this._row(r)).join('');
     this._paintMap(view.rows);
 
-    this.el.keys.innerHTML = (view.keys || []).map(([k, what]) => (
-      `<span><b>${escapeHtml(k)}</b>${escapeHtml(what)}</span>`
-    )).join('') + '<span class="t-back"><b>T</b>step back from the terminal</span>';
+    /* Key hints name ACTIONS, not keys, so they print "T" on a keyboard and
+       "VIEW" on an Xbox pad without any screen knowing which is plugged in. */
+    const scheme = this.input ? this.input.scheme : 'kbm';
+    const glyph = (a) => (a ? controlLabel(a, scheme) : null);
+    this.el.keys.innerHTML = (view.keys || []).map(([a, what]) => {
+      const g = glyph(a);
+      return `<span>${g ? `<b>${escapeHtml(g)}</b>` : ''}${escapeHtml(what)}</span>`;
+    }).join('')
+      + `<span class="t-back"><b>${escapeHtml(glyph('terminal'))}</b>step back from the terminal</span>`;
 
     // A tutorial hint outranks a transient toast: it is the thing the player
     // is stuck on, and it stays until they are not.

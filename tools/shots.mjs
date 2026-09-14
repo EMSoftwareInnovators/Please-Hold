@@ -141,6 +141,21 @@ await page.evaluate(() => {
 await settle(1200);
 await shot('12b-tutorial');
 
+/* The same call docked under the terminal -- the layout the tutorial depends
+   on, and the one thing a screenshot can actually prove about it. */
+await page.evaluate(() => {
+  const g = window.__game;
+  g.focusTerminal(true);
+  g.terminal.go('ACCT');
+  g.terminal.input = 'PRZ';
+  g.terminal.results = g.database.search('PRZ');
+  g.terminal.dirty = true;
+});
+await settle(900);
+await shot('12c-terminal-on-call');
+await page.evaluate(() => window.__game.focusTerminal(false));
+await settle(400);
+
 await page.evaluate(() => {
   const g = window.__game;
   g.runner.end('reset');

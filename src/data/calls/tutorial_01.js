@@ -78,7 +78,7 @@ export default {
     wait_sit: {
       speaker: 'caller',
       waitFor: { flags: ['sat_down'] },
-      hint: 'SIT AT THE DISPATCH DESK — walk to the chair and press E',
+      hint: 'SIT AT THE DISPATCH DESK — walk to the chair and press {use}',
       next: 'terminal_ask',
     },
 
@@ -87,7 +87,7 @@ export default {
       lines: [
         { text: "There you are." },
         { text: "Now the box in front of you. That's the CIS — customer information system. It's how you know who you're talking to." },
-        { text: "Pull it up. Press T, or just lean into it." },
+        { text: "Pull it up, or just lean into it." },
       ],
       next: 'wait_terminal',
     },
@@ -96,14 +96,14 @@ export default {
     wait_terminal: {
       speaker: 'caller',
       waitFor: { flags: ['used_terminal'] },
-      hint: 'OPEN THE DISPATCH TERMINAL — press T',
+      hint: 'OPEN THE DISPATCH TERMINAL — press {terminal}',
       next: 'lookup_ask',
     },
 
     lookup_ask: {
       speaker: 'caller',
       lines: [
-        { text: "F2 is accounts. Type a name, a number, a street — it isn't fussy." },
+        { text: "Accounts is the second screen along the top. Type a name, a number, a street — it isn't fussy." },
         { text: "Try somebody. Przybylski, out on Quarry Road. P-R-Z. Pull the record up and look at it." },
         { text: "I want you in the habit before it matters.", stage: 'and it is going to matter' },
       ],
@@ -114,7 +114,7 @@ export default {
     wait_lookup: {
       speaker: 'caller',
       waitFor: { anyLookup: true },
-      hint: 'LOOK UP AN ACCOUNT — F2, type a name, RETURN, then RETURN again to open it',
+      hint: 'LOOK UP AN ACCOUNT — {screenAccounts}, type a name, {select}, then {select} again to open it',
       next: 'lookup_done',
     },
 
@@ -137,7 +137,7 @@ export default {
       lines: [
         { text: "Right. There's an actual job waiting on you, so let's do it together." },
         { text: "Day office took a call before they went home and never wrote it up. Tree down across the primary on County Road Eighteen, south end. That's circuit MH-14." },
-        { text: "F3 is tickets. Press N for a new one, pick the cause off the list, and open it." },
+        { text: "Tickets is the third screen. Start a new one, pick the cause off the list, and open it." },
       ],
       effects: [{ op: 'flag', name: 'told_about_tree' }],
       next: 'wait_ticket',
@@ -147,7 +147,7 @@ export default {
     wait_ticket: {
       speaker: 'caller',
       waitFor: { flags: ['created_a_ticket'] },
-      hint: 'OPEN A TROUBLE TICKET — F3, then N, choose a cause, then RETURN',
+      hint: 'OPEN A TROUBLE TICKET — {screenTickets}, then {newTicket}, choose a cause, then {select}',
       next: 'ticket_done',
     },
 
@@ -155,7 +155,7 @@ export default {
       speaker: 'caller',
       lines: [
         { text: "Good. That ticket is the whole job, by the way. Everything else is paperwork about that ticket." },
-        { text: "Now put somebody on it. RETURN on the ticket takes you to units." },
+        { text: "Now put somebody on it. Opening the ticket takes you to units." },
         { text: "You'll see three. Halloran in Seven, Sikes and Day in Twelve, and a line crew that is at home in bed and will let you know about it." },
       ],
       next: 'dispatch_ask',
@@ -176,7 +176,7 @@ export default {
     wait_dispatch: {
       speaker: 'caller',
       waitFor: { anyCrewDispatched: true },
-      hint: 'DISPATCH A UNIT — select the ticket, choose a unit, RETURN',
+      hint: 'DISPATCH A UNIT — select the ticket, choose a unit, {select}',
       next: 'dispatch_done',
     },
 
@@ -216,7 +216,7 @@ export default {
       speaker: 'caller',
       lines: [
         { text: "Then it'll take you two seconds." },
-        { text: "H puts me on it. H brings me back. Go." },
+        { text: "One button puts me on it. The same one brings me back. Go." },
       ],
       next: 'wait_hold',
     },
@@ -226,7 +226,7 @@ export default {
       lines: [
         { text: "Because at some point tonight you're going to have somebody on the line and a second one ringing, and you'll have to choose." },
         { text: "And I'd rather the first time you press that button it's me on the other end of it and not a woman on oxygen." },
-        { text: "H. Go on.", stage: 'not unkind. she has done this job.' },
+        { text: "Go on. The hold button.", stage: 'not unkind. she has done this job.' },
       ],
       effects: [{ op: 'flag', name: 'taught_hold_why' }],
       next: 'wait_hold',
@@ -236,7 +236,7 @@ export default {
     wait_hold: {
       speaker: 'caller',
       waitFor: { flags: ['used_hold'] },
-      hint: 'PUT HER ON HOLD, THEN COME BACK — press H, then H again',
+      hint: 'PUT HER ON HOLD, THEN COME BACK — press {hold}, then {hold} again',
       next: 'hold_done',
     },
 
