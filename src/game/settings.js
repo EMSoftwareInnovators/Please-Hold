@@ -9,17 +9,27 @@
 const KEY = 'pleasehold.settings.v1';
 
 export const DEFAULTS = {
-  masterVolume: 0.85,
-  musicVolume: 0.6,
+  // audio
+  masterVolume: 0.8,
+  ambienceVolume: 0.55,     // rain and room tone; the loudest thing by default
   voiceVolume: 1.0,
+  musicVolume: 0.5,         // hold music
+  roomTone: true,           // the ballast hum and the CRT's flyback whine
+
+  // controls
   mouseSensitivity: 1.0,
   invertY: false,
-  renderScale: 1.0,
-  filmGrain: true,
   headBob: true,
+
+  // display -- see src/engine/quality.js for what a preset costs
+  quality: null,            // null = pick one on first run
+  pixelRatio: 1,            // 1 even on Retina. Deliberate; see renderer.js.
+  adaptiveQuality: true,    // let the renderer shed resolution to hold 60
+  filmGrain: true,
+
+  // accessibility
+  reduceFlicker: false,     // caps the strobing in the power-failure events
   subtitles: true,
-  // Accessibility: some horror beats lean on flicker. This caps it.
-  reduceFlicker: false,
   textSpeed: 1.0,
 };
 

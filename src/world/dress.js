@@ -151,10 +151,10 @@ export function dressBuilding(scene, mats, office) {
     d.add(box(1.61, 0.034, 0.79, mats.get('darkPlastic'), { pos: [0, 0.710, 0] }));
     for (const sx of [-0.76, 0.76]) d.add(box(0.032, 0.68, 0.72, steel, { pos: [sx, 0.35, 0] }));
     d.add(box(1.5, 0.42, 0.018, steel, { pos: [0, 0.44, -0.34] }));
-    const m = crtMonitor(mats);
+    // These two are dark all night, so they get no light of their own.
+    const m = crtMonitor(mats, { glow: false });
     m.position.set(-0.30, 0.74, -0.12);
     m.rotation.y = 0.2;
-    m.userData.glow.intensity = 0;
     d.add(m);
     const k = keyboard(mats);
     k.position.set(-0.26, 0.741, 0.22);

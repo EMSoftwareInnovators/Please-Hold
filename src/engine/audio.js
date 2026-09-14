@@ -63,6 +63,7 @@ export class AudioEngine {
     this.clips = new Map();          // id -> AudioBuffer, for real recordings
     this.loops = new Map();
     this.buses = {};
+    this._live = new Set();          // in-flight speak() chains
     this._noise = null;
     this._failed = false;
   }
@@ -78,7 +79,7 @@ export class AudioEngine {
       this.ctx = new Ctx({ latencyHint: 'interactive' });
       if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
       this._buildBuses();
-      this._noise = this._makeNoiseBuffer(3.0);
+      this._noise = this._makeNoiseBuffer(6.0);
       this.ready = true;
       return true;
     } catch (err) {
@@ -93,15 +94,25 @@ export class AudioEngine {
     const master = ctx.createGain();
     // A gentle limiter so a thunderclap on top of a ring does not clip.
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -12; comp.knee.value = 12; comp.ratio.value = 6;
-    comp.attack.value = 0.004; comp.release.value = 0.22;
+    // A safety limiter, not a mix bus compressor. The first version sat at
+    // -12/6:1 and was gain-reducing on the ambience alone, which flattened
+    // everything and made the whole mix breathe against the rain.
+    comp.threshold.value = -3; comp.knee.value = 6; comp.ratio.value = 12;
+    comp.attack.value = 0.003; comp.release.value = 0.25;
     master.connect(comp).connect(ctx.destination);
     this.master = master;
 
+    // bus -> duck -> master. Two stages on purpose: `applySettings` owns the
+    // first (the player's volume) and `duck()` owns the second (the mix
+    // getting out of the way of a call). One gain node for both meant every
+    // settings change undid whatever the game had ducked.
+    this.ducks = {};
     for (const name of ['ambience', 'sfx', 'voice', 'phone', 'radio', 'music']) {
       const g = ctx.createGain();
-      g.connect(master);
+      const d = ctx.createGain();
+      g.connect(d).connect(master);
       this.buses[name] = g;
+      this.ducks[name] = d;
     }
     this.applySettings();
   }
@@ -109,27 +120,44 @@ export class AudioEngine {
   applySettings() {
     if (!this.ready) return;
     const s = this.settings;
-    const m = s ? s.get('masterVolume') : 0.85;
-    this.master.gain.value = m;
-    if (s) {
-      this.buses.music.gain.value = s.get('musicVolume');
-      this.buses.voice.gain.value = s.get('voiceVolume');
+    if (!s) return;
+    this.master.gain.value = s.get('masterVolume');
+    this.buses.music.gain.value = s.get('musicVolume');
+    this.buses.voice.gain.value = s.get('voiceVolume');
+    this.buses.ambience.gain.value = s.get('ambienceVolume');
+    // Room tone is the ballast hum and the CRT's flyback whine. Some people
+    // find a 15kHz sine genuinely painful; it is not worth forcing on anyone.
+    const tone = s.get('roomTone') === false ? 0 : 1;
+    for (const name of ['fluorescent', 'crtWhine']) {
+      const h = this.loops.get(name);
+      if (h) h.setVolume(tone * (name === 'crtWhine' ? 0.30 : 0.45));
     }
   }
 
   get now() { return this.ctx ? this.ctx.currentTime : 0; }
 
+  /**
+   * Noise, normalized. The first version summed white noise with an
+   * un-normalized brown integrator, which drifted past full scale and sat on
+   * the master compressor -- that is part of why the room sounded like a
+   * blown speaker rather than like weather.
+   */
   _makeNoiseBuffer(seconds) {
     const ctx = this.ctx;
     const len = Math.floor(ctx.sampleRate * seconds);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    let last = 0;
+    let last = 0, peak = 0;
     for (let i = 0; i < len; i++) {
       const white = Math.random() * 2 - 1;
       last = (last + 0.02 * white) / 1.02;    // a little brown in the white
-      d[i] = white * 0.7 + last * 2.4;
+      const v = white * 0.7 + last * 2.4;
+      d[i] = v;
+      const a = Math.abs(v);
+      if (a > peak) peak = a;
     }
+    const norm = peak > 0 ? 0.92 / peak : 1;
+    for (let i = 0; i < len; i++) d[i] *= norm;
     return buf;
   }
 
@@ -303,13 +331,20 @@ export class AudioEngine {
 
     const stops = [() => chain.stop()];
     let ended = false;
+    // Every line chain carries a continuously running noise bed. If a line
+    // ends by a path that does not reach finish() -- a dropped handle, an
+    // oscillator whose onended never fires -- that bed runs forever and the
+    // room fills up with hiss, one call at a time. This is the backstop.
+    let guard = null;
     const finish = () => {
       if (ended) return;
       ended = true;
+      if (guard) clearTimeout(guard);
       // let the chain's noise bed fade rather than click off
       const g = chain.output.gain;
       g.setTargetAtTime(0, ctx.currentTime, 0.05);
       setTimeout(() => { for (const s of stops) s(); }, 300);
+      this._live.delete(finish);
       if (opts.onEnd) opts.onEnd();
     };
 
@@ -323,6 +358,8 @@ export class AudioEngine {
       duration = clip.duration;
       src.onended = finish;
       stops.push(() => { try { src.stop(); } catch {} });
+      guard = setTimeout(finish, (duration + 2) * 1000);
+      this._live.add(finish);
       return { stop: finish, duration };
     }
 
@@ -393,6 +430,8 @@ export class AudioEngine {
     osc.stop(endAt); sub.stop(endAt); breath.stop(endAt);
     stops.push(() => { try { osc.stop(); sub.stop(); breath.stop(); } catch {} });
     osc.onended = finish;
+    guard = setTimeout(finish, (duration + 2) * 1000);
+    this._live.add(finish);
 
     return { stop: finish, duration };
   }
@@ -555,42 +594,100 @@ export class AudioEngine {
       s.connect(f).connect(g).connect(dest);
       s.start();
       stops.push(() => { try { s.stop(); } catch {} });
-      return { filter: f, gain: g };
+      return { source: s, filter: f, gain: g };
     };
 
     switch (name) {
       case 'rain': {
-        // two layers: a hiss on the glass and a lower wash on the roof
-        startNoise('bandpass', 5200, 0.6, 0.34, out);
-        startNoise('lowpass', 900, 0.7, 0.20, out);
+        /* Steady filtered noise is not rain. It is static, which is exactly
+           what the first version of this sounded like.
+
+           Rain has three things static does not: a low wash with almost no
+           top end, slow GUSTS that move the whole level around, and discrete
+           DROPLETS hitting glass. The droplets are what the ear uses to
+           decide it is hearing weather, so they matter more than the bed. */
+
+        // the wash on the roof -- almost all of the energy, almost none of
+        // the brightness
+        const wash = startNoise('lowpass', 420, 0.6, 0.95, out);
+        // the body
+        const body = startNoise('bandpass', 1150, 0.35, 0.30, out);
+        // a little sheet-hiss on the glass, kept well down
+        const hiss = startNoise('highpass', 3600, 0.4, 0.030, out);
+
+        // Gusts: two slow LFOs at unrelated rates so the pattern never
+        // audibly repeats.
+        for (const [rate, depth, target] of [[0.043, 0.30, wash.gain.gain], [0.071, 0.10, body.gain.gain]]) {
+          const lfo = ctx.createOscillator();
+          lfo.type = 'sine'; lfo.frequency.value = rate;
+          const amt = ctx.createGain(); amt.gain.value = depth;
+          lfo.connect(amt).connect(target);
+          lfo.start();
+          stops.push(() => { try { lfo.stop(); } catch {} });
+        }
+
+        // Droplets on the window. Scheduled a second ahead in batches so the
+        // timing is sample-accurate rather than at the mercy of setTimeout.
+        const dropBus = ctx.createGain();
+        dropBus.gain.value = 0.9;
+        dropBus.connect(out);
+        const schedule = () => {
+          if (!this.loops.has('rain')) return;
+          const until = ctx.currentTime + 1.2;
+          while (handle._nextDrop < until) {
+            const t = Math.max(ctx.currentTime, handle._nextDrop);
+            const src = this._noiseSource(false);
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass';
+            f.frequency.value = 900 + Math.random() * 3200;
+            f.Q.value = 3 + Math.random() * 7;
+            const g = ctx.createGain();
+            const peak = 0.05 + Math.random() * 0.16;
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(peak, t + 0.002);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random() * 0.05);
+            src.connect(f).connect(g).connect(dropBus);
+            src.start(t); src.stop(t + 0.12);
+            handle._nextDrop += 0.018 + Math.random() * 0.075;
+          }
+          handle._timer = setTimeout(schedule, 700);
+        };
+        setTimeout(() => { handle._nextDrop = ctx.currentTime + 0.1; schedule(); }, 0);
+        stops.push(() => clearTimeout(handle._timer));
+
         out.connect(this.buses.ambience);
         break;
       }
       case 'fluorescent': {
-        // 120Hz ballast buzz with a little grit riding on it
-        const o = ctx.createOscillator();
-        o.type = 'sawtooth'; o.frequency.value = 120;
-        const f = ctx.createBiquadFilter();
-        f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 4;
-        const g = ctx.createGain(); g.gain.value = 0.020;
-        o.connect(f).connect(g).connect(out);
-        o.start();
-        stops.push(() => { try { o.stop(); } catch {} });
-        startNoise('bandpass', 3400, 2.5, 0.006, out);
+        /* Magnetic ballast hum is 120Hz and its low harmonics, heard through
+           a diffuser and a ceiling. The first version ran a sawtooth through
+           a bandpass at 1400Hz with Q=4, which is not a hum -- it is a buzz,
+           and it was the second loudest thing in the game. */
+        for (const [freq, gain] of [[120, 0.040], [240, 0.015], [360, 0.006]]) {
+          const o = ctx.createOscillator();
+          o.type = 'sine'; o.frequency.value = freq;
+          const g = ctx.createGain(); g.gain.value = gain;
+          o.connect(g).connect(out);
+          o.start();
+          stops.push(() => { try { o.stop(); } catch {} });
+        }
+        // the faintest tube grit, rolled off hard
+        const grit = startNoise('bandpass', 2200, 1.2, 0.010, out);
+        grit.filter.Q.value = 1.2;
         out.connect(this.buses.ambience);
         break;
       }
       case 'crtWhine': {
-        // the 15.7kHz flyback, plus its audible subharmonic
+        /* The 15.7kHz flyback line, and ONLY that. The first version also ran
+           its subharmonic at 7.8kHz, which is squarely in the range the ear is
+           most sensitive to -- that was the whine, not the flyback. Kept very
+           quiet, and switchable off entirely (Options > ROOM TONE). */
         const o = ctx.createOscillator();
         o.type = 'sine'; o.frequency.value = 15734;
         const g = ctx.createGain(); g.gain.value = 0.010;
-        const o2 = ctx.createOscillator();
-        o2.type = 'sine'; o2.frequency.value = 7867;
-        const g2 = ctx.createGain(); g2.gain.value = 0.004;
-        o.connect(g).connect(out); o2.connect(g2).connect(out);
-        o.start(); o2.start();
-        stops.push(() => { try { o.stop(); o2.stop(); } catch {} });
+        o.connect(g).connect(out);
+        o.start();
+        stops.push(() => { try { o.stop(); } catch {} });
         out.connect(this.buses.ambience);
         break;
       }
@@ -654,6 +751,7 @@ export class AudioEngine {
       name,
       gain: out,
       _timer: null,
+      _nextDrop: 0,
       setVolume: (v, ramp = 0.2) => {
         out.gain.setTargetAtTime(v, ctx.currentTime, ramp);
       },
@@ -673,11 +771,20 @@ export class AudioEngine {
   stopLoop(name, fade) { const h = this.loops.get(name); if (h) h.stop(fade); }
   isLooping(name) { return this.loops.has(name); }
 
+  /** Cut every voice chain in flight. Used when a shift ends or resets. */
+  stopAllVoices() {
+    for (const fn of [...this._live]) { try { fn(); } catch { /* ignore */ } }
+    this._live.clear();
+  }
+
+  /** How many voice chains are alive. If this climbs, something is leaking. */
+  get liveVoices() { return this._live.size; }
+
   /** Duck a bus -- used when a call is live so the room recedes. */
   duck(busName, to, ramp = 0.3) {
     if (!this.ready) return;
-    const b = this.buses[busName];
-    if (b) b.gain.setTargetAtTime(to, this.ctx.currentTime, ramp);
+    const d = this.ducks[busName];
+    if (d) d.gain.setTargetAtTime(to, this.ctx.currentTime, ramp);
   }
 }
 

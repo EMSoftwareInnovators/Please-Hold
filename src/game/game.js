@@ -14,6 +14,7 @@
 import * as THREE from '../vendor/three.module.js';
 
 import { Renderer } from '../engine/renderer.js';
+import { PRESETS, PRESET_ORDER, guessPreset } from '../engine/quality.js';
 import { MaterialLibrary } from '../engine/materials.js';
 import { AudioEngine } from '../engine/audio.js';
 import { Input, MODE } from '../engine/input.js';
@@ -25,6 +26,7 @@ import { dressBuilding } from '../world/dress.js';
 import { Rain, WetGlass, StormSky, buildExterior } from '../world/weather.js';
 import { setClock } from '../world/props.js';
 import { mergeStatics } from '../world/geo.js';
+import { bakeStaticLight, setBakedPower } from '../world/bake.js';
 import { SPAWN, DESK } from '../world/plan.js';
 
 import { GameClock, SHIFT_START } from './clock.js';
@@ -71,7 +73,18 @@ export class Game {
      ============================================================ */
   async boot(onProgress = () => {}) {
     const canvas = document.getElementById('screen');
-    this.renderer = new Renderer(canvas);
+
+    // Pick a budget before anything is built. Every expensive decision below
+    // reads from it; see src/engine/quality.js.
+    if (!this.settings.get('quality')) this.settings.set('quality', guessPreset());
+    this.qualityName = this.settings.get('quality');
+    this.quality = PRESETS[this.qualityName] || PRESETS.medium;
+
+    this.renderer = new Renderer(canvas, {
+      ...this.quality,
+      pixelRatio: this.settings.get('pixelRatio') ?? this.quality.pixelRatio,
+    });
+    this.renderer.adaptive = this.settings.get('adaptiveQuality') !== false;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x05070a);
 
@@ -86,12 +99,17 @@ export class Game {
 
     onProgress(0.70, 'putting the storm outside');
     buildExterior(this.scene, this.mats);
-    this.sky = new StormSky(this.scene);
-    this.rain = new Rain(this.scene, { x: 26, y: 0, z: 6, w: 64, h: 22, d: 64 }, 1700);
-    this.wetGlass = new WetGlass().applyTo(this.scene);
+    this.sky = new StormSky(this.scene, this.quality.skyOctaves);
+    this.rain = new Rain(this.scene, { x: 26, y: 0, z: 6, w: 64, h: 22, d: 64 }, this.quality.rainDrops);
+    this.wetGlass = new WetGlass(this.quality.glassDetail).applyTo(this.scene);
 
     onProgress(0.80, 'turning the lights on');
-    this.lighting = new Lighting(this.scene, this.mats, this.office).build();
+    this.lighting = new Lighting(this.scene, this.mats, this.office, {
+      poolSize: this.quality.lightPool,
+      shadows: this.quality.shadows,
+    }).build();
+    this.lighting.reduceFlicker = this.settings.get('reduceFlicker');
+    this.lighting.setFocus(DESK.seat.x, 2.6, DESK.seat.z);
     this.lighting.update(0, 0.016);
 
     // Collapse the static shell into one draw call per material. The office
@@ -104,6 +122,15 @@ export class Game {
 
     onProgress(0.86, 'wiring the desk');
     this._buildSystems();
+
+    // Every fixture in the building, evaluated once into vertex colors. This
+    // is what lets the light pool stay small without the far half of the
+    // office going black. See world/bake.js.
+    onProgress(0.90, 'baking the ceiling lights');
+    const baked = bakeStaticLight(this.scene, this.lighting.fixtures, this.office.solids.list);
+    this.bakedMaterials = baked.materials;
+    console.log(`static light bake: ${baked.meshes} meshes, ${baked.verts} verts, ${baked.ms}ms`);
+    this.bakeStats = baked;
 
     onProgress(0.93, 'capturing reflections');
     this.renderer.captureEnvironment(this.scene, new THREE.Vector3(DESK.seat.x, 1.5, DESK.seat.z + 1.2), 128);
@@ -368,6 +395,7 @@ export class Game {
     }
 
     switch (e.code) {
+      case 'F3': this.hud.togglePerf(); e.preventDefault(); break;
       case 'Escape': this.pause(); break;
       case 'KeyF': this.answer(); break;
       case 'KeyH': this.toggleHold(); break;
@@ -445,7 +473,21 @@ export class Game {
 
   applySettings() {
     this.audio.applySettings();
-    this.renderer.setQuality(this.settings.get('renderScale'));
+
+    const name = this.settings.get('quality') || 'medium';
+    const preset = PRESETS[name] || PRESETS.medium;
+    if (name !== this.qualityName) {
+      this.qualityName = name;
+      this.quality = preset;
+      this.lighting.setPoolSize(preset.lightPool, preset.shadows);
+    }
+    this.renderer.setPreset({
+      ...preset,
+      pixelRatio: this.settings.get('pixelRatio') ?? preset.pixelRatio,
+    });
+    this.renderer.adaptive = this.settings.get('adaptiveQuality') !== false;
+
+    this.lighting.reduceFlicker = this.settings.get('reduceFlicker');
     const g = this.renderer.post.grade;
     g.grain.value = this.settings.get('filmGrain') ? 0.030 : 0.0;
   }
@@ -479,10 +521,12 @@ export class Game {
     this.clock.start();
     this.setMode('world');
 
-    // the room comes up to sound
-    this.audio.loop('rain', { volume: 0.42 });
-    this.audio.loop('fluorescent', { volume: 0.5 });
-    this.audio.loop('crtWhine', { volume: 0.35 });
+    // The room comes up to sound. Levels are relative to the ambience bus,
+    // which the player controls separately from master.
+    const tone = this.settings.get('roomTone') === false ? 0 : 1;
+    this.audio.loop('rain', { volume: 0.55 });
+    this.audio.loop('fluorescent', { volume: 0.45 * tone });
+    this.audio.loop('crtWhine', { volume: 0.30 * tone });
 
     this.gameState.log(this.clock.stamp(), 'Shift began. Storm across the district.', 'note');
     bus.emit(EVENTS.SHIFT_START, {});
@@ -511,6 +555,7 @@ export class Game {
     this.callUI.close();
     this.hud.show(false);
     this.setMode('ui');
+    this.audio.stopAllVoices();
     this.audio.stopLoop('fluorescent', 1.2);
     this.audio.stopLoop('crtWhine', 0.8);
     this.audio.duck('ambience', 0.25, 2.0);
@@ -528,6 +573,7 @@ export class Game {
     const now = nowMs / 1000;
     let dt = this._last ? now - this._last : 0.016;
     this._last = now;
+    const frameMs = Math.min(200, dt * 1000);
     dt = Math.min(0.05, dt);           // a tab that was backgrounded must not teleport the shift
     this.time += dt;
 
@@ -568,7 +614,20 @@ export class Game {
       this.callUI.update(0);
     }
 
-    // presentation always runs, so the title screen is a live room
+    // The baked light is part of the mains, so it dims with them.
+    if (this.bakedMaterials && this.lighting) {
+      const p = this.lighting.power;
+      if (Math.abs(p - (this._lastBakedPower ?? -1)) > 0.01) {
+        setBakedPower(this.bakedMaterials, p);
+        this._lastBakedPower = p;
+      }
+    }
+
+    // presentation always runs, so the title screen is a live room.
+    // The light pool follows the camera, so only the fixtures the player is
+    // actually under are real lights. See lighting.js.
+    const cam = this.renderer.camera.position;
+    this.lighting.setFocus(cam.x, 2.6, cam.z);
     this.lighting.update(this.time, dt);
     this.rain.update(this.time);
     const flash = this.lighting.lightningFlash || 0;
@@ -579,7 +638,8 @@ export class Game {
     if (this._screenTexture) this._screenTexture.needsUpdate = true;
     if (this.terminalFocused) this._blitTerminal();
 
-    this.renderer.render(this.scene, this.time);
+    this.renderer.render(this.scene, this.time, frameMs);
+    if (this.hud) this.hud.updatePerf(this.renderer, this.scene);
     this.input.endFrame();
   }
 

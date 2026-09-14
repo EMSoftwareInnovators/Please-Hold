@@ -193,11 +193,28 @@ export class DialogueRunner {
 
   /** Put the conversation to sleep without tearing it down. */
   hold() { this.paused = true; }
+
+  /**
+   * Wake it back up. There are three states a held conversation can be in and
+   * all three have to be handled, because the player is free to press HOLD at
+   * any instant:
+   *
+   *   waiting on a line   -- replay that line from the top
+   *   waiting on a reply  -- put the replies back on screen. This one bit:
+   *                          the runner still had them, but the UI had
+   *                          cleared its copy when the panel closed, so the
+   *                          conversation was alive with no way to answer it.
+   *   between the two     -- carry on
+   */
   resume() {
     this.paused = false;
-    // If we were mid-line when held, pick the line up again from the top.
-    if (this.node && this.waiting) this._speakCurrentLine();
-    else if (this.node && !this.choices.length) this._advanceLines();
+    if (!this.node) return;
+    if (this.choices.length) {
+      bus.emit(EVENTS.CHOICES, { call: this.call, node: this.nodeId, choices: this.choices });
+      return;
+    }
+    if (this.waiting) return this._speakCurrentLine();
+    this._advanceLines();
   }
 
   /** Walk to a node: apply its effects, then start its lines. */
@@ -341,6 +358,63 @@ export class DialogueRunner {
     const to = this._pendingGoto;
     this._pendingGoto = null;
     if (to) this._goto(to);
+  }
+
+  /**
+   * Snapshot this conversation so another one can use the runner.
+   *
+   * There is one runner and six telephone lines. Parking a caller and picking
+   * up a second one used to overwrite the first conversation outright: coming
+   * back to line 1 resumed you into line 2's node graph. Hold is the central
+   * mechanic of this game, so each parked line carries its own state and
+   * hands it back on the way in.
+   */
+  capture() {
+    if (!this.active || !this.call) return null;
+    return {
+      call: this.call,
+      nodeId: this.nodeId,
+      lineIndex: this.lineIndex,
+      choices: this.choices.slice(),
+      waiting: this.waiting,
+      history: this.history.slice(),
+      pendingGoto: this._pendingGoto,
+      playerEnd: this._playerEnd,
+    };
+  }
+
+  /** Put a captured conversation back. */
+  restore(snap) {
+    if (!snap) return false;
+    this.call = snap.call;
+    this.nodeId = snap.nodeId;
+    this.node = snap.call.nodes[snap.nodeId] || null;
+    this.lineIndex = snap.lineIndex;
+    this.choices = snap.choices.slice();
+    this.waiting = snap.waiting;
+    this.history = snap.history.slice();
+    this._pendingGoto = snap.pendingGoto;
+    this._playerEnd = snap.playerEnd;
+    this.active = true;
+    this.paused = true;      // resume() is what wakes it
+    return true;
+  }
+
+  /**
+   * Drop the current conversation without announcing an ending. Used when a
+   * parked caller runs out of patience: the call is over, but it did not
+   * reach an end node, so nothing downstream should treat it as completed.
+   */
+  discard(call) {
+    if (call && this.call !== call) return false;
+    this.active = false;
+    this.paused = false;
+    this.waiting = false;
+    this.call = null;
+    this.node = null;
+    this.nodeId = null;
+    this.choices = [];
+    return true;
   }
 
   /** Caller (or something else) terminates the call. */

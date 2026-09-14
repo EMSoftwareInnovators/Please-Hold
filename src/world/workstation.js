@@ -151,8 +151,16 @@ export function crtMonitor(mats, opts = {}) {
     // Rougher than real glass on purpose: a mirror-smooth tube puts a
     // hard reflection of the ceiling troffer dead centre of the screen and
     // makes the terminal unreadable from the chair.
-    roughness: 0.38,
+    // Matte, not glass. The roaming fill light in lighting.js sits above
+    // the player by construction, so anything glossy the player looks at
+    // gets a specular hotspot dead centre. An anti-glare CRT coating is the
+    // period-correct excuse for the roughness that removes it.
+    roughness: 0.62,
     metalness: 0,
+    // The room's environment map puts a hard reflection of the ceiling
+    // troffer in the middle of the tube, right where the text is. A real
+    // CRT has an anti-glare coating; this is that coating.
+    envMapIntensity: 0.18,
     emissive: 0xffffff,
     emissiveIntensity: 0,      // terminal.js raises this when the CRT is on
   });
@@ -185,10 +193,16 @@ export function crtMonitor(mats, opts = {}) {
     }));
   }
 
-  // --- the glow the tube throws into the room; terminal.js drives it
-  const glow = new THREE.PointLight(0xbfe9c8, 0, 2.8, 2.0);
-  glow.position.set(0, CY, FRONT + 0.18);
-  g.add(glow);
+  // The glow the tube throws into the room; terminal.js drives it.
+  // Only the dispatch terminal gets one. The dark day-shift monitors used to
+  // carry a light each at zero intensity, which a forward renderer still
+  // charges for on every pixel in the building. Pass `glow: false` for those.
+  let glow = null;
+  if (opts.glow !== false) {
+    glow = new THREE.PointLight(0xbfe9c8, 0, 2.8, 2.0);
+    glow.position.set(0, CY, FRONT + 0.18);
+    g.add(glow);
+  }
 
   g.userData.animated = true;          // the tube, its glow and its lamp all move
   g.userData.screenMaterial = screenMat;

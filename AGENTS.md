@@ -36,7 +36,85 @@ The one exception is the CRT, which is allowed — required — to look like a C
 scanlines, phosphor bloom, barrel glass. That is a prop behaving correctly, not
 the renderer pretending to be old.
 
-## 2. Dialogue is data. Always.
+## 2. The performance budget
+
+The first build of this game ran at **seconds per frame on an M1 MacBook Air**.
+Not because of geometry -- the office is 22k triangles and about 100 draw calls
+from the desk -- but because of three decisions that are easy to make again.
+Do not make them again.
+
+### 2a. Lights are the budget. There are ten of them.
+
+three.js is a **forward renderer**. Every light in the scene is evaluated by
+every fragment of every object, every frame. The light count is a direct
+multiplier on the cost of every pixel in the game.
+
+The first build had **37**: a spot light and a fill point light inside each of
+thirteen ceiling troffers, plus the exterior, the desk lamp, two exit signs, a
+vending machine, and a glow light inside each of three CRTs including the two
+that are switched off all night.
+
+It now has **7 to 11**, depending on quality preset:
+
+| | |
+|---|---|
+| ceiling | a POOL of 1-4 spots, lent to the nearest fixtures (`lighting.js`) |
+| roaming fill | 1 point, follows the player |
+| desk lamp | 1 spot |
+| CRT glow | 1 point, the dispatch terminal only |
+| exterior | 1 point (one of the two sodium yard lights; the other is emissive) |
+| ambient | 1 hemisphere + 1 directional for the storm |
+
+**If you add a light, subtract a light.** Before reaching for one, check
+whether an emissive material plus the bloom in the post chain will do — that
+is what the exit signs, the vending machine and eleven of the thirteen
+troffers use, and it is free.
+
+Never change the light COUNT per frame. Changing it forces three.js to
+recompile every material in the scene. The pool fades unused slots to zero
+intensity instead of removing them, and `Lighting.setPoolSize()` is a
+settings-time operation only.
+
+### 2b. The room is lit by a bake, not by lights
+
+`world/bake.js` evaluates all thirteen fixtures once at load into a per-vertex
+irradiance term, injected into the standard material's shader as
+`totalEmissiveRadiance += bakedLight * diffuseColor.rgb`. Full-room lighting,
+zero per-frame cost.
+
+Two things to know before touching it:
+
+* **It adds irradiance, it does not multiply albedo.** three's built-in
+  `vertexColors` multiplies the diffuse color, which can only darken. Baking
+  that way produces a uniformly black building.
+* **A vertex bake is only as detailed as the mesh.** `geo.js` subdivides any
+  surface over 1.2m for exactly this reason. A floor that is one quad has
+  nowhere to put the light.
+
+The bake cannot move, so it scales with the mains (`setBakedPower`) and the
+pooled lights supply the flicker the player can actually watch.
+
+### 2c. Pixel ratio defaults to 1, even on Retina
+
+A 2x display renders four times the fragments. In a dark, grainy, heavily
+post-processed game that is close to invisible and close to unaffordable. It is
+an option (`Options > RESOLUTION`), not a default.
+
+### 2d. There is an adaptive scaler, and it is not a substitute for the above
+
+`renderer.js` watches a rolling median frame time and walks the internal render
+scale down to hold the frame budget. It exists so the game degrades smoothly on
+unknown hardware. It is not permission to be wasteful: it only trades
+resolution, and a scene with 37 lights is still slow at 50% resolution.
+
+### 2e. Measure, do not guess
+
+`node tools/perf.mjs` prints lights, shadows, draw calls, triangles, render
+target and frame rate at each preset. **The frame rate is meaningless** — it is
+SwiftShader in a container — but the light count and the draw calls are not.
+In game, **F3** shows the same numbers live.
+
+## 3. Dialogue is data. Always.
 
 Every conversation in this game is a plain object in `src/data/calls/`. Nothing
 in `src/game/` knows the name of a single character.
@@ -66,7 +144,7 @@ A reply that returns to the node it came from (`"let me check that"`,
 least one reply that always progresses. Every call in the repo was written with
 this bug at least once; `tools/soak.mjs` catches it.
 
-## 3. Horror is escalation, not jumpscares
+## 4. Horror is escalation, not jumpscares
 
 `src/game/horror.js` is organised in tiers and they must stay that way:
 
@@ -89,7 +167,7 @@ time, and calls from other decades.
 **Adding an event:** one entry in `HORROR` in `src/game/horror.js`, with
 `start`/`update`/`end`. Then fire it from data: `{ op: 'horror', event: 'name' }`.
 
-## 4. Ordinary calls are load-bearing
+## 5. Ordinary calls are load-bearing
 
 Do not cut the mundane conversations to make room for more scares. They are what
 the scares are measured against. A shift that is all anomaly is a shift with no
@@ -103,7 +181,7 @@ The director enforces this rhythm with `mundaneDebt` — a strange call raises i
 and ordinary calls pay it down, so supernatural calls always land against a
 floor of real work. Do not remove that mechanism; tune the numbers if needed.
 
-## 5. Architecture
+## 6. Architecture
 
 Systems own their own rules. `src/game/game.js` wires them together and owns
 nothing. **If a feature can only be added by editing `game.js`, it has probably
@@ -126,7 +204,7 @@ been designed wrong.**
 * Map coordinates are in **map units** (roughly km), +X east, +Y north.
 * World coordinates are in **meters**, +X east, +Z south, +Y up.
 
-## 6. Testing
+## 7. Testing
 
 **Do not assume code works because it looks correct.** Four harnesses exist and
 all of them have caught real bugs:
@@ -137,7 +215,9 @@ all of them have caught real bugs:
 | `node tools/boot.mjs` | boots the real game headless and fails on any console error |
 | `node tools/soak.mjs` | runs **every call script to completion on three different reply strategies** — this is what catches dead ends and infinite loops |
 | `node tools/playthrough.mjs` | drives a whole shift with real key events and asserts 23 things about the result |
-| `npm run check` | all of the above |
+| `node tools/audio.mjs` | taps the audio buses and measures RMS, spectral balance and voice-chain leaks |
+| `node tools/perf.mjs` | lights, draw calls and render target at each quality preset |
+| `npm run check` | all of the above except perf and shots |
 | `npm run shots` | captures the game at 20 moments, so visual regressions are visible |
 
 The harnesses render through SwiftShader at a few frames a second. **Anything
@@ -147,7 +227,7 @@ game, instrument before you "fix" anything.
 
 Never make a test pass by weakening the assertion.
 
-## 7. Code style
+## 8. Code style
 
 Match the surrounding code.
 
@@ -159,7 +239,25 @@ Match the surrounding code.
   genuinely deferred it goes in `ROADMAP.md`, not in a comment.
 * Keep `src/vendor/` unmodified. If three.js needs patching, wrap it instead.
 
-## 8. Assets
+## 9. Audio
+
+Everything is synthesized. Two rules learned the hard way:
+
+* **Steady filtered noise is not weather, it is static.** The first rain loop
+  was two band-filtered noise sources at a fixed gain, and it sounded exactly
+  like a blown speaker for the entire game. Rain needs a bass-dominant wash,
+  slow gusts, and discrete droplet transients — the droplets are what the ear
+  uses to decide it is hearing weather. `tools/audio.mjs` asserts the rain is
+  bass-weighted; if `high` approaches `low`, it has become hiss again.
+* **Every line chain carries a running noise bed.** If a chain is not finished
+  it runs forever and the room fills with hiss one call at a time. `speak()`
+  has a hard timeout backstop and `audio.liveVoices` reports the count; the
+  audio test asserts it returns to zero.
+
+A 7.8kHz tone sits right where the ear is most sensitive. Do not put one in the
+room tone. Anything in that range belongs behind `Options > ROOM TONE`.
+
+## 10. Assets
 
 The game currently ships zero binary assets and that is a feature, not a gap —
 it means every material, sign, model and voice can be replaced independently.

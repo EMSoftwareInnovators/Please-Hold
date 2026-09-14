@@ -49,7 +49,7 @@ void main() {
 
 export class Rain {
   /** @param {object} vol {x, y, z, w, h, d} world-space volume to fill */
-  constructor(scene, vol, count = 1600) {
+  constructor(scene, vol, count = 800) {
     const g = new THREE.InstancedBufferGeometry();
     const streak = new THREE.PlaneGeometry(0.008, 1);
     g.index = streak.index;
@@ -135,7 +135,10 @@ float runnel(vec2 uv, float seed) {
 
 void main() {
   vec2 uv = vUv;
-  float w = runnel(uv, 1.0) + runnel(uv * vec2(1.3, 0.9) + 0.31, 2.0) * 0.8;
+  float w = runnel(uv, 1.0);
+#if GLASS_DETAIL > 0
+  w += runnel(uv * vec2(1.3, 0.9) + 0.31, 2.0) * 0.8;
+#endif
   // static speckle of fine drops that have not started moving yet
   float spec = step(0.985, hash(floor(uv * vec2(130.0, 190.0))));
   w = clamp(w + spec * 0.5, 0.0, 1.0);
@@ -147,10 +150,11 @@ void main() {
 }`;
 
 export class WetGlass {
-  constructor() {
+  /** `detail` 0 runs a single runnel pass instead of two. */
+  constructor(detail = 1) {
     this.material = new THREE.ShaderMaterial({
       vertexShader: GLASS_VERT,
-      fragmentShader: GLASS_FRAG,
+      fragmentShader: GLASS_FRAG.replace('GLASS_DETAIL', String(detail | 0)),
       uniforms: {
         uTime: { value: 0 },
         uTint: { value: new THREE.Color(0x8aa6bd) },
@@ -206,7 +210,7 @@ float vnoise(vec2 p){
 }
 float fbm(vec2 p){
   float s = 0.0, a = 0.5;
-  for (int i = 0; i < 5; i++) { s += vnoise(p) * a; p *= 2.03; a *= 0.5; }
+  for (int i = 0; i < SKY_OCTAVES; i++) { s += vnoise(p) * a; p *= 2.03; a *= 0.5; }
   return s;
 }
 
@@ -234,10 +238,11 @@ void main() {
 }`;
 
 export class StormSky {
-  constructor(scene) {
+  /** `octaves` trades cloud detail for fill cost; see engine/quality.js. */
+  constructor(scene, octaves = 3) {
     this.material = new THREE.ShaderMaterial({
       vertexShader: SKY_VERT,
-      fragmentShader: SKY_FRAG,
+      fragmentShader: SKY_FRAG.replace('SKY_OCTAVES', String(Math.max(1, octaves | 0))),
       uniforms: { uTime: { value: 0 }, uFlash: { value: 0 } },
       side: THREE.BackSide,
       depthWrite: false,
@@ -324,9 +329,10 @@ export function buildExterior(scene, mats) {
     }));
   }
 
-  // Two sodium yard lights. These are the only warm color outside and they
-  // do most of the work of making the rain visible.
-  for (const [lx, lz] of [[19.5, 2.0], [24.0, 12.0]]) {
+  // Sodium yard lights. The heads are emissive on both, but only ONE of them
+  // is a real light -- see the note at the top of lighting.js about what a
+  // forward renderer charges for a light that is merely "outside".
+  for (const [lx, lz, real] of [[19.5, 2.0, true], [24.0, 12.0, false]]) {
     const h = 7.4;
     g.add(cylinder(0.10, 0.13, h, poleMat, { pos: [lx, h / 2 - 0.2, lz], seg: 8, shadow: 'none' }));
     g.add(box(0.6, 0.14, 0.34, armMat, { pos: [lx + 0.3, h - 0.3, lz], shadow: 'none' }));
@@ -336,9 +342,11 @@ export function buildExterior(scene, mats) {
     );
     head.position.set(lx + 0.58, h - 0.42, lz);
     g.add(head);
-    const l = new THREE.PointLight(0xffa93a, 26, 22, 2.0);
-    l.position.set(lx + 0.58, h - 0.5, lz);
-    g.add(l);
+    if (real) {
+      const l = new THREE.PointLight(0xffa93a, 34, 26, 2.0);
+      l.position.set(lx + 0.58, h - 0.5, lz);
+      g.add(l);
+    }
   }
 
   // A treeline far out, as low-detail silhouettes. Lightning is what sees it.

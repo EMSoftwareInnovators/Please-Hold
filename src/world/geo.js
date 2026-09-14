@@ -10,20 +10,39 @@
    ============================================================ */
 import * as THREE from '../vendor/three.module.js';
 
-/** Rewrite a BoxGeometry's UVs into meters. Assumes 1 segment per face. */
+/**
+ * Rewrite a BoxGeometry's UVs into meters.
+ *
+ * Derived from each vertex's own normal and position rather than from three's
+ * face ordering, so it works on a SUBDIVIDED box as well as a 6-quad one.
+ * That matters because the static light bake stores irradiance per vertex:
+ * a wall that is one quad has nowhere to put the light.
+ */
 export function boxUV(geo, w, h, d) {
+  const pos = geo.attributes.position;
+  const nrm = geo.attributes.normal;
   const uv = geo.attributes.uv;
-  // three's box face order: +X, -X, +Y, -Y, +Z, -Z
-  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
-  for (let f = 0; f < 6; f++) {
-    const [su, sv] = dims[f];
-    for (let i = 0; i < 4; i++) {
-      const k = f * 4 + i;
-      uv.setXY(k, uv.getX(k) * su, uv.getY(k) * sv);
-    }
+  for (let i = 0; i < pos.count; i++) {
+    const ax = Math.abs(nrm.getX(i)), ay = Math.abs(nrm.getY(i)), az = Math.abs(nrm.getZ(i));
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    if (ax >= ay && ax >= az) uv.setXY(i, z + d / 2, y + h / 2);
+    else if (ay >= ax && ay >= az) uv.setXY(i, x + w / 2, z + d / 2);
+    else uv.setXY(i, x + w / 2, y + h / 2);
   }
   uv.needsUpdate = true;
   return geo;
+}
+
+/**
+ * How many segments a surface of this size should carry.
+ *
+ * Vertex-baked light is only as detailed as the mesh it sits on, so anything
+ * large enough for the player to walk past gets subdivided. Small props do
+ * not: they are lit by the pooled lights and extra vertices there are waste.
+ */
+export function segmentsFor(size, per = 0.8, cap = 16) {
+  if (size < 1.2) return 1;
+  return Math.max(1, Math.min(cap, Math.round(size / per)));
 }
 
 /** Rewrite a PlaneGeometry's UVs into meters. */
@@ -39,7 +58,10 @@ export function planeUV(geo, w, h) {
  * `opts.shadow` -> 'both' | 'cast' | 'receive' | 'none' (default 'both').
  */
 export function box(w, h, d, material, opts = {}) {
-  const geo = boxUV(new THREE.BoxGeometry(w, h, d), w, h, d);
+  const seg = opts.tessellate === false
+    ? [1, 1, 1]
+    : [segmentsFor(w), segmentsFor(h), segmentsFor(d)];
+  const geo = boxUV(new THREE.BoxGeometry(w, h, d, seg[0], seg[1], seg[2]), w, h, d);
   const m = new THREE.Mesh(geo, material);
   const s = opts.shadow ?? 'both';
   m.castShadow = s === 'both' || s === 'cast';
@@ -52,7 +74,10 @@ export function box(w, h, d, material, opts = {}) {
 
 /** A horizontal plane (floor/ceiling) with meter UVs, facing +Y by default. */
 export function plane(w, d, material, opts = {}) {
-  const geo = planeUV(new THREE.PlaneGeometry(w, d), w, d);
+  const geo = planeUV(
+    new THREE.PlaneGeometry(w, d, segmentsFor(w, 0.55, 32), segmentsFor(d, 0.55, 32)),
+    w, d,
+  );
   const m = new THREE.Mesh(geo, material);
   m.rotation.x = opts.down ? Math.PI / 2 : -Math.PI / 2;
   m.receiveShadow = opts.shadow !== 'none';
@@ -63,7 +88,10 @@ export function plane(w, d, material, opts = {}) {
 
 /** A vertical wall panel with meter UVs. `axis` is 'x' or 'z'. */
 export function wall(w, h, material, opts = {}) {
-  const geo = planeUV(new THREE.PlaneGeometry(w, h), w, h);
+  const geo = planeUV(
+    new THREE.PlaneGeometry(w, h, segmentsFor(w, 0.55, 32), segmentsFor(h, 0.55, 32)),
+    w, h,
+  );
   const m = new THREE.Mesh(geo, material);
   m.receiveShadow = true;
   m.castShadow = false;

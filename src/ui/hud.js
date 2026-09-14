@@ -27,7 +27,10 @@ export class HUD {
       toasts: $('toasts'),
       objective: $('objective'),
       reticle: $('reticle'),
+      perf: $('perf'),
     };
+    this.showPerf = false;
+    this._perfTimer = 0;
     this._radioTimer = 0;
     this._wire();
   }
@@ -93,6 +96,38 @@ export class HUD {
   }
 
   setObjective(text) { this.el.objective.textContent = text || ''; }
+
+  /** F3. Shows what the frame is actually being spent on. */
+  togglePerf() {
+    this.showPerf = !this.showPerf;
+    this.el.perf.classList.toggle('hidden', !this.showPerf);
+  }
+
+  /**
+   * Counting lights every frame would itself cost something, so the scene is
+   * only walked a few times a second.
+   */
+  updatePerf(renderer, scene) {
+    if (!this.showPerf) return;
+    this._perfTimer -= 1;
+    if (this._perfTimer > 0) return;
+    this._perfTimer = 20;
+
+    let lights = 0, shadows = 0, meshes = 0;
+    scene.traverse((o) => {
+      if (o.isLight) { lights++; if (o.castShadow) shadows++; }
+      else if (o.isMesh) meshes++;
+    });
+    const s = renderer.stats;
+    const slow = s.fps < 45;
+    this.el.perf.innerHTML =
+      `<b>${s.fps.toFixed(0)} fps</b>  ${s.ms.toFixed(1)} ms` + (slow ? '  <span class="warn">(scaling)</span>' : '') + '\n'
+      + `render   ${s.rt}  @${(s.scale * 100) | 0}%\n`
+      + `draws    ${s.drawCalls}   tris ${(s.tris / 1000).toFixed(1)}k\n`
+      + `lights   ${lights} (${shadows} shadowed)\n`
+      + `meshes   ${meshes}\n`
+      + `F3 to hide`;
+  }
   setReticle(on) { this.el.reticle.style.display = on ? '' : 'none'; }
 
   update(dt) {

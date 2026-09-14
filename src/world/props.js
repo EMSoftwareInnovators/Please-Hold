@@ -362,19 +362,18 @@ export function vendingMachine(mats) {
   // the lit product panel behind it -- this is the only light in the break room
   const panel = new THREE.Mesh(
     new THREE.PlaneGeometry(W * 0.55, H * 0.62),
-    new THREE.MeshStandardMaterial({ color: 0xd8c99a, emissive: 0xffe9b0, emissiveIntensity: 0.9, roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: 0xd8c99a, emissive: 0xffe9b0, emissiveIntensity: 2.2, roughness: 0.8 }),
   );
   panel.position.set(-W * 0.18, H * 0.60, D / 2 - 0.02);
   g.add(panel);
-  const light = new THREE.PointLight(0xffe2a8, 3.2, 3.4, 2.0);
-  light.position.set(-W * 0.18, H * 0.62, D / 2 + 0.35);
-  g.add(light);
+  // No real light here. A lit panel behind glass reads perfectly well as a
+  // light source via emissive + bloom, and a point light in the break room
+  // would be evaluated by every pixel in the building. See lighting.js.
   // selection keypad and coin return
   for (let i = 0; i < 8; i++) {
     g.add(box(0.05, 0.032, 0.014, mats.get('black'), { pos: [W * 0.26, H * 0.86 - i * 0.055, D / 2 + 0.004], shadow: 'none' }));
   }
   g.add(box(0.18, 0.10, 0.02, mats.get('black'), { pos: [W * 0.24, H * 0.30, D / 2 + 0.004] }));
-  g.userData.light = light;
   return g;
 }
 
@@ -403,14 +402,12 @@ export function exitSignProp(mats) {
   g.add(box(0.36, 0.19, 0.055, mats.get('paintedSteel'), { pos: [0, 0, -0.03] }));
   const face = new THREE.Mesh(
     new THREE.PlaneGeometry(0.32, 0.155),
-    new THREE.MeshStandardMaterial({ map: texFrom(exitSign()), emissiveMap: texFrom(exitSign()), emissive: 0xffffff, emissiveIntensity: 2.4, roughness: 0.6 }),
+    new THREE.MeshStandardMaterial({ map: texFrom(exitSign()), emissiveMap: texFrom(exitSign()), emissive: 0xffffff, emissiveIntensity: 3.4, roughness: 0.6 }),
   );
   face.position.z = 0.001;
   g.add(face);
-  const light = new THREE.PointLight(0xff4a2a, 1.5, 2.6, 2.0);
-  light.position.set(0, -0.05, 0.2);
-  g.add(light);
-  g.userData.light = light;
+  // Emissive + bloom only. Two exit signs used to cost two real lights for a
+  // glow that the post chain gives away for free.
   return g;
 }
 

@@ -66,6 +66,7 @@ export class CallDirector {
     this.lastCallEndedAt = -999;
     this.mundaneDebt = 0;              // strange calls raise it; ordinary ones pay it down
     this.minGapSeconds = 6;
+    this.holdGrace = 25;       // seconds a parked caller is protected for
     this._sinceLast = 0;
     this._debtTimer = 0;
     this.enabled = true;
@@ -177,6 +178,15 @@ export class CallDirector {
     // a dispatcher with three phones going is a different, worse game.
     if (phone.activeLine != null || phone.anyRinging) return;
     if (this.deps.isBusy && this.deps.isBusy()) return;
+
+    // Do not ring on top of a caller the player has only just parked. Hold is
+    // a few seconds of pressure, not an invitation for the switchboard to
+    // bury the conversation you were having -- a story call parked for two
+    // seconds used to be starved out by the next call in the queue and never
+    // come back. After `holdGrace` the player has clearly moved on and the
+    // phone is fair game again.
+    const parked = phone.oldestHeld;
+    if (parked && parked.heldSeconds < this.holdGrace) return;
     if (this._sinceLast < this.minGapSeconds) return;
 
     const now = this.deps.clock.minutes;

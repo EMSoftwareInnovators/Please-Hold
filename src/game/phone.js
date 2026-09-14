@@ -37,6 +37,7 @@ export class PhoneSystem {
       index: i,
       state: LINE_STATE.IDLE,
       call: null,
+      convo: null,          // this line's own paused conversation, if parked
       heldSeconds: 0,
       patience: 0,
       warned: false,
@@ -53,6 +54,12 @@ export class PhoneSystem {
   get activeCall() { return this.active ? this.active.call : null; }
   get anyRinging() { return this.lines.some((l) => l.state === LINE_STATE.RINGING); }
   get held() { return this.lines.filter((l) => l.state === LINE_STATE.HOLD); }
+  /** The longest-parked line, or null. */
+  get oldestHeld() {
+    let best = null;
+    for (const l of this.held) if (!best || l.heldSeconds > best.heldSeconds) best = l;
+    return best;
+  }
   freeLine() { return this.lines.find((l) => l.state === LINE_STATE.IDLE) || null; }
 
   /* ============================================================
@@ -119,6 +126,9 @@ export class PhoneSystem {
 
     if (this.activeLine === index) {
       this.activeLine = null;
+      // The line keeps its own conversation while it waits. See
+      // DialogueRunner.capture().
+      line.convo = this.runner.capture();
       this.runner.hold();
     }
     if (this.audio) {
@@ -148,6 +158,16 @@ export class PhoneSystem {
     const rec = this.state.caller(id);
     rec.onHoldSeconds += Math.round(line.heldSeconds);
 
+    // RESUME goes out FIRST so the call panel is back on screen before the
+    // runner speaks or re-offers replies. The other order meant the panel
+    // opened after the replies were emitted and wiped them on the way in.
+    bus.emit(EVENTS.RESUME, { line: index, call: line.call, heldSeconds: line.heldSeconds });
+
+    // Reload this line's conversation. Without this the runner is still
+    // holding whatever was answered most recently.
+    if (line.convo && this.runner.call !== line.call) this.runner.restore(line.convo);
+    line.convo = null;
+
     // The script can branch on a long hold without the phone knowing why.
     const spec = line.call.hold || {};
     if (spec.onReturnNode && line.heldSeconds > (spec.longHold ?? 35)) {
@@ -156,7 +176,6 @@ export class PhoneSystem {
     } else {
       this.runner.resume();
     }
-    bus.emit(EVENTS.RESUME, { line: index, call: line.call, heldSeconds: line.heldSeconds });
     bus.emit(EVENTS.LINE_CHANGED, { lines: this.snapshot() });
     return true;
   }
@@ -200,6 +219,7 @@ export class PhoneSystem {
   _clear(line) {
     line.state = LINE_STATE.IDLE;
     line.call = null;
+    line.convo = null;
     line.heldSeconds = 0;
     line.warned = false;
     line.ringsLeft = 0;
@@ -252,6 +272,10 @@ export class PhoneSystem {
         rec.hungUpOn += 1;
         this.state.trust(id, spec.trustOnTimeout ?? -1);
         if (spec.timeoutFlag) this.state.set(spec.timeoutFlag, true);
+        // If the runner is still loaded with this conversation, drop it. A
+        // caller who gives up did not reach an end node, so this must NOT
+        // emit a dialogue end -- nothing downstream should count it as done.
+        this.runner.discard(call);
         this._clear(line);
         bus.emit(EVENTS.HUNGUP, { line: line.index, call, reason: 'hold-timeout' });
         bus.emit(EVENTS.TOAST, { text: `LINE ${line.index + 1} HUNG UP` });

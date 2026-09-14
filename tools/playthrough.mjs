@@ -38,10 +38,14 @@ await page.evaluate(() => {
     callsCompleted: [],
     choicesTaken: 0,
     holdsDone: 0,
+    hangups: [],
     log: [],
   };
   window.__bus.on(window.__events.DIALOGUE_END, ({ call, reason }) => {
     window.__drive.callsCompleted.push({ id: call.id, reason });
+  });
+  window.__bus.on(window.__events.HUNGUP, ({ call, reason }) => {
+    window.__drive.hangups.push({ id: call ? call.id : '?', reason });
   });
   window.__bus.on(window.__events.LINE_SPOKEN, (p) => {
     window.__drive.seen.add(`${p.call ? p.call.id : '?'}:${p.node}`);
@@ -74,6 +78,15 @@ const pump = async (seconds) => {
       const g = window.__game;
       const d = window.__drive;
       if (g.gameState.has('slice_complete')) return true;
+
+      // Come back to anyone parked before taking a new call. A player
+      // triages; a harness that only ever answers new rings will starve the
+      // conversation it parked and then report the game as broken.
+      if (g.phone.activeLine === null && !g.radioCall && g.phone.held.length) {
+        g.phone.resume(g.phone.held[0].index);
+        d.log.push(`returned to line ${g.phone.held.length ? '?' : g.phone.activeLine}`);
+        return false;
+      }
 
       // answer anything ringing
       if (g.phone.anyRinging) { g.answer(); return false; }
@@ -164,6 +177,30 @@ await page.evaluate(() => { window.__game.phone.resume(window.__game.phone.held[
 await page.waitForTimeout(400);
 check('returning to a held line resumes the conversation', await page.evaluate(() => window.__game.phone.activeLine !== null && !window.__game.runner.paused));
 
+// Hold specifically while REPLIES are on screen. This is the state that used
+// to strand the conversation: the runner kept its choices, the panel did not.
+const heldAtChoice = await page.evaluate(async () => {
+  const g = window.__game;
+  for (let i = 0; i < 40 && !g.callUI.choices.length; i++) {
+    if (g.callUI.visible && g.callUI._timer > 0) {
+      g.callUI._timer = 0;
+      if (g.callUI._pendingPlayerLine) { g.callUI._pendingPlayerLine = false; g.runner.playerLineFinished(); }
+      else g.runner.lineFinished();
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const before = g.callUI.choices.length;
+  if (!before) return { before, after: -1 };
+  g.phone.hold();
+  await new Promise((r) => setTimeout(r, 250));
+  const whileHeld = g.callUI.choices.length;
+  g.phone.resume(g.phone.held[0].index);
+  await new Promise((r) => setTimeout(r, 250));
+  return { before, whileHeld, after: g.callUI.choices.length };
+});
+check('holding while replies are on screen does not strand the call',
+  heldAtChoice.after === heldAtChoice.before, JSON.stringify(heldAtChoice));
+
 /* ---- terminal: search, open a record, and read it ---- */
 await page.evaluate(() => window.__game.focusTerminal(true));
 await page.waitForTimeout(200);
@@ -193,6 +230,22 @@ await page.waitForTimeout(200);
 check('terminal can open a new trouble ticket', (await page.evaluate(() => window.__game.outages.list.length)) > 0);
 await page.evaluate(() => window.__game.focusTerminal(false));
 
+/* ---- where is the first call before we hand over to the pump? ---- */
+const preState = await page.evaluate(() => {
+  const g = window.__game;
+  return {
+    activeLine: g.phone.activeLine,
+    runnerCall: g.runner.call ? g.runner.call.id : null,
+    runnerNode: g.runner.nodeId,
+    runnerActive: g.runner.active,
+    runnerPaused: g.runner.paused,
+    uiVisible: g.callUI.visible,
+    uiChoices: g.callUI.choices.length,
+    lines: g.phone.lines.map((l) => `${l.index}:${l.state}:${l.call ? l.call.id : '-'}`),
+  };
+});
+console.log('\nbefore pump: ' + JSON.stringify(preState));
+
 /* ---- run the rest of the shift ---- */
 const finished = await pump(180);
 
@@ -204,6 +257,7 @@ const out = await page.evaluate(() => {
     state: g.state,
     beat: g.gameState.beat,
     completed: d.callsCompleted.map((c) => c.id),
+    hangups: d.hangups,
     choicesTaken: d.choicesTaken,
     nodesSeen: d.seen.size,
     dispatches: g.gameState.count('dispatches'),

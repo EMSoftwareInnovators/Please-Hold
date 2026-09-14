@@ -83,23 +83,30 @@ result was checked, not assumed.
 
 ## Known problems
 
-1. **Performance is unverified on real hardware.** Everything here was rendered
-   through SwiftShader in a headless container at 0.3–3.7 fps. That number says
-   nothing useful about a GPU. The obvious optimisation (static merging) is
-   done; shadow casters are capped at two. Someone needs to run it on a real
-   machine and profile it.
-2. **Draw calls are still ~383.** Props are not merged (they carry interaction
-   and animation). Instancing the day-shift desks and the ceiling grid would
-   help.
-3. **No audio device in CI**, so the WebAudio graph is built and exercised but
-   never actually *heard* by a test. The line-effect chains are verified to
-   construct and connect; their sound is unverified.
-4. The **`_updateStanding` method on `Player`** is vestigial — standing works,
+1. **Performance still needs confirming on real hardware.** The first build ran
+   at seconds per frame on an M1 MacBook Air. The causes were found and fixed
+   — 37 real-time lights cut to 7-11, static lighting baked to vertices,
+   Retina 2x rendering turned off by default, MSAA made a preset, and an
+   adaptive resolution scaler added — but every measurement here is still
+   SwiftShader in a container. The structural numbers (lights, draw calls,
+   triangles) are sound; the frame rate is not measurable from here. `F3`
+   in game and `node tools/perf.mjs` report the real ones.
+2. **Draw calls are ~101 from the desk, ~383 in the scene.** Props are not
+   merged (they carry interaction and animation). Instancing the day-shift
+   desks and the ceiling grid would help if it is still needed.
+3. **The baked light cannot move.** A single fixture going dark leaves its
+   baked pool on the floor. Fixtures near the player hold a real pooled light
+   and flicker correctly, so this is only visible across the room during a
+   brownout.
+4. **No audio device in CI.** The graph is now *measured* — `tools/audio.mjs`
+   taps the buses and asserts levels, spectral balance and that voice chains
+   are released — but nothing has actually listened to it.
+5. The **`_updateStanding` method on `Player`** is vestigial — standing works,
    but it eases through `update()` rather than that method.
-5. The **horror `degrade` and `tunnel` events restore the grade with a
+6. The **horror `degrade` and `tunnel` events restore the grade with a
    `requestAnimationFrame` loop** that does not stop if the event is re-fired
    mid-restore. Harmless today; will misbehave if two grade events overlap.
-6. **Mouse input in the terminal is not wired.** The CRT is keyboard-only, which
+7. **Mouse input in the terminal is not wired.** The CRT is keyboard-only, which
    is period-correct but means a player who reaches for the mouse gets nothing.
 
 ---
@@ -154,10 +161,11 @@ The pipeline is finished and unused. Recording even the 30 lines of
 * a light-switch interaction, so darkness can be the player's own fault
 * a second floor or a basement for the equipment room the conduit implies
 
-### 7. Performance pass on real hardware
-Instance the ceiling grid and the day desks; consider a single shadow-casting
-light; profile the rain and glass shaders, which are the most expensive things
-in the frame and were never measured on a GPU.
+### 7. Confirm the performance work on a GPU
+The structural fixes are in (see Known problems 1). What remains is measurement:
+run `F3` on real hardware at each preset, confirm the adaptive scaler settles
+where it should, and profile the rain and wet-glass shaders, which are the
+most expensive per-pixel work left and have never been measured on a GPU.
 
 ---
 

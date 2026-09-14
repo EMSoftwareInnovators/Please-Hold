@@ -151,39 +151,73 @@ export class Menu {
 
   options() {
     const s = this.settings;
-    const row = (label, key, kind) => {
-      const v = s.get(key);
-      const shown = kind === 'bool' ? (v ? 'ON' : 'OFF') : `${Math.round(v * 100)}%`;
-      return `<div class="opt"><span>${label}</span><span>
-        <button data-k="${key}" data-d="-1">&lt;</button>
-        <span style="display:inline-block;min-width:64px;text-align:center">${shown}</span>
-        <button data-k="${key}" data-d="1">&gt;</button></span></div>`;
+
+    /* Three row kinds: a 0..1 percentage, a boolean, and a list of named
+       choices (quality, pixel ratio). All three use the same stepper, so the
+       panel stays keyboard- and click-friendly without a widget library. */
+    const ENUMS = {
+      quality: { values: ['low', 'medium', 'high'], labels: ['LOW', 'MEDIUM', 'HIGH'] },
+      pixelRatio: { values: [1, 1.5, 2], labels: ['1x', '1.5x', '2x (RETINA)'] },
     };
+
+    const shown = (key) => {
+      const v = s.get(key);
+      if (ENUMS[key]) {
+        const i = Math.max(0, ENUMS[key].values.indexOf(v));
+        return ENUMS[key].labels[i];
+      }
+      if (typeof v === 'boolean') return v ? 'ON' : 'OFF';
+      return `${Math.round(v * 100)}%`;
+    };
+
+    const row = (label, key, note) => `<div class="opt">
+      <span>${label}${note ? `<em>${note}</em>` : ''}</span>
+      <span class="stepper">
+        <button data-k="${key}" data-d="-1">&lt;</button>
+        <span class="val">${shown(key)}</span>
+        <button data-k="${key}" data-d="1">&gt;</button>
+      </span></div>`;
+
     this.panel('options', `
       <h2>OPTIONS</h2>
+
+      <h3>DISPLAY</h3>
+      ${row('QUALITY', 'quality')}
+      ${row('RESOLUTION', 'pixelRatio', '1x is the default even on a Retina screen')}
+      ${row('ADAPTIVE', 'adaptiveQuality', 'drop resolution automatically to hold the frame rate')}
+      ${row('FILM GRAIN', 'filmGrain')}
+      <p class="optnote">Press <b>F3</b> in game for frame time, draw calls and light count.</p>
+
       <h3>AUDIO</h3>
       ${row('MASTER', 'masterVolume')}
-      ${row('VOICE', 'voiceVolume')}
+      ${row('RAIN &amp; ROOM', 'ambienceVolume')}
+      ${row('VOICES', 'voiceVolume')}
       ${row('HOLD MUSIC', 'musicVolume')}
-      <h3>DISPLAY</h3>
-      ${row('RENDER SCALE', 'renderScale')}
-      ${row('FILM GRAIN', 'filmGrain', 'bool')}
+      ${row('ROOM TONE', 'roomTone', 'ballast hum and the CRT&rsquo;s flyback whine')}
+
       <h3>CONTROLS</h3>
       ${row('MOUSE SENSITIVITY', 'mouseSensitivity')}
-      ${row('INVERT Y', 'invertY', 'bool')}
-      ${row('HEAD BOB', 'headBob', 'bool')}
+      ${row('INVERT Y', 'invertY')}
+      ${row('HEAD BOB', 'headBob')}
+
       <h3>ACCESSIBILITY</h3>
-      ${row('REDUCE FLICKER', 'reduceFlicker', 'bool')}
+      ${row('REDUCE FLICKER', 'reduceFlicker', 'caps the strobing in the power-failure events')}
       ${row('TEXT SPEED', 'textSpeed')}
-      <p style="margin-top:18px">REDUCE FLICKER caps the strobing in the power-failure
-      events. The story is unchanged.</p>
     `);
+
     this.el.body.querySelectorAll('button[data-k]').forEach((b) => {
       b.addEventListener('click', () => {
         const k = b.dataset.k, d = Number(b.dataset.d);
         const cur = s.get(k);
-        if (typeof cur === 'boolean') s.set(k, !cur);
-        else s.set(k, Math.max(0, Math.min(2, Math.round((cur + d * 0.1) * 100) / 100)));
+        if (ENUMS[k]) {
+          const vals = ENUMS[k].values;
+          const i = Math.max(0, vals.indexOf(cur));
+          s.set(k, vals[Math.max(0, Math.min(vals.length - 1, i + d))]);
+        } else if (typeof cur === 'boolean') {
+          s.set(k, !cur);
+        } else {
+          s.set(k, Math.max(0, Math.min(2, Math.round((cur + d * 0.1) * 100) / 100)));
+        }
         if (this.actions.applySettings) this.actions.applySettings();
         this.options();
       });

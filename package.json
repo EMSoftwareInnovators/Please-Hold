@@ -8,6 +8,8 @@
     "dev": "node serve.cjs",
     "check": "node tools/check.mjs",
     "shots": "node tools/shots.mjs",
+    "check:audio": "node tools/audio.mjs",
+    "check:perf": "node tools/perf.mjs",
     "app": "electron .",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",

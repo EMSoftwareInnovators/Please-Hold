@@ -30,6 +30,7 @@ const info = await page.evaluate(() => {
     accounts: g.database.all.length,
     crews: g.crews.crews.length,
     merge: g.mergeStats,
+    bake: g.bakeStats && { meshes: g.bakeStats.meshes, verts: g.bakeStats.verts, min: g.bakeStats.min, mean: g.bakeStats.mean, max: g.bakeStats.max, ms: g.bakeStats.ms },
     sceneMeshes: (() => { let n = 0; g.scene.traverse((o) => { if (o.isMesh) n++; }); return n; })(),
   };
 });

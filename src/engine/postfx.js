@@ -138,8 +138,9 @@ function quadMesh(material) {
 }
 
 export class PostChain {
-  constructor(renderer, width, height) {
+  constructor(renderer, width, height, samples = 4) {
     this.renderer = renderer;
+    this.samples = samples;
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
@@ -147,7 +148,8 @@ export class PostChain {
     this.type = half;
 
     const rtOpts = { type: half, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true };
-    this.scene3 = new THREE.WebGLRenderTarget(width, height, { ...rtOpts, samples: 4 });
+    this.rtOpts = rtOpts;
+    this.scene3 = new THREE.WebGLRenderTarget(width, height, { ...rtOpts, samples });
     const bw = Math.max(1, width >> 2), bh = Math.max(1, height >> 2);
     this.bright = new THREE.WebGLRenderTarget(bw, bh, { ...rtOpts, depthBuffer: false });
     this.blurA = new THREE.WebGLRenderTarget(bw, bh, { ...rtOpts, depthBuffer: false });
@@ -182,6 +184,7 @@ export class PostChain {
       depthTest: false, depthWrite: false,
     });
 
+    this.sceneStats = { calls: 0, triangles: 0 };
     this.quad = quadMesh(this.mComposite);
     this.quad.frustumCulled = false;
     this.scene.add(this.quad);
@@ -190,6 +193,16 @@ export class PostChain {
 
   /** The uniforms the horror director is allowed to move. */
   get grade() { return this.mComposite.uniforms; }
+
+  /** Change MSAA. The target has to be rebuilt, so this is a settings-time
+   *  operation, not a per-frame one. */
+  setSamples(samples) {
+    if (samples === this.samples) return;
+    this.samples = samples;
+    const { width, height } = this.scene3;
+    this.scene3.dispose();
+    this.scene3 = new THREE.WebGLRenderTarget(width, height, { ...this.rtOpts, samples });
+  }
 
   setSize(w, h) {
     this.width = w; this.height = h;
@@ -215,6 +228,10 @@ export class PostChain {
     r.setRenderTarget(this.scene3);
     r.clear();
     r.render(scene3d, camera);
+    // three resets info.render on every render() call, and the composite pass
+    // below is the last one -- so the scene's real cost has to be read here,
+    // or the perf overlay reports "1 draw call" forever.
+    this.sceneStats = { calls: r.info.render.calls, triangles: r.info.render.triangles };
 
     // bright pass
     this.mBright.uniforms.tDiffuse.value = this.scene3.texture;

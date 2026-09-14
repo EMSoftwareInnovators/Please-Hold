@@ -67,11 +67,33 @@ npm run app          # run it
 npm run dist         # package for the current platform
 ```
 
+### Performance
+
+The game targets 60fps and **adapts to hold it**: the renderer watches a rolling
+median frame time and walks the internal resolution down when the budget is
+missed, back up when there is headroom. Three presets sit on top of that
+(`Options > QUALITY`), controlling the number of real-time lights, MSAA, shadows,
+rain density and shader detail.
+
+Two defaults worth knowing about:
+
+* **Resolution defaults to 1x even on a Retina display.** A 2x display renders
+  four times the fragments for a difference that is close to invisible in a
+  dark, grainy, post-processed picture. Turn it up in Options if you have the
+  headroom.
+* **The ceiling lighting is baked.** All thirteen fixtures are evaluated once at
+  load into per-vertex irradiance, so the room is fully lit with only a handful
+  of real-time lights. See `AGENTS.md` §2 for why this matters.
+
+Press **F3** in game for live frame time, draw calls and light count.
+
 ### Tests
 
 ```bash
-npm run check        # everything: validator, boot, soak, playthrough
+npm run check        # validator, boot, audio, soak, playthrough
 node tools/calls.mjs # validate every call script (no browser needed)
+node tools/audio.mjs # measure the audio buses -- levels, balance, leaks
+node tools/perf.mjs  # lights, draw calls and render target per preset
 npm run shots        # capture screenshots to ./shots
 ```
 
@@ -88,6 +110,7 @@ npm run shots        # capture screenshots to ./shots
 | `E` | use what you are looking at |
 | `Q` | stand up from the desk |
 | `Esc` | pause |
+| `F3` | frame time, draw calls, light count |
 
 ### The telephone
 | Key | |
@@ -139,7 +162,8 @@ not read.
 | Story scheduler | beat calls, time calls, a weighted random pool, and a rhythm rule that keeps ordinary work between the strange calls |
 | Horror | 13 named events from "the storm could be doing this" to events with no innocent reading |
 | Environment | procedural office, storm exterior, rain volume, rain-on-glass shader, lightning, fluorescent ballast simulation |
-| Audio | full synthesis: rain, thunder, ballast hum, CRT whine, ring, dial tone, DTMF, squelch, hold music, and **five telephone line treatments** |
+| Audio | full synthesis: rain with gusts and droplet transients, thunder, ballast hum, CRT flyback, ring, dial tone, DTMF, squelch, hold music, and **five telephone line treatments** |
+| Rendering budget | baked static lighting, a pooled light rig, static geometry merging, three quality presets and an adaptive resolution scaler |
 | Game clock | shift time, and events that can lie about it |
 | Save | checkpoint at every story beat |
 | UI | title, options, how-to, pause, HUD, call panel, CRT reader, end-of-shift report |
