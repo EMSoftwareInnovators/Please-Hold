@@ -24,6 +24,8 @@
       see `registerClip()`.
    ============================================================ */
 
+import { SOUNDS, lineToSegments } from './phonemes.js';
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /* ============================================================
@@ -43,18 +45,6 @@ export const VOICES = {
   whisper:   { pitch: 140, formant: 1.02, rate: 0.72, breath: 0.85, gravel: 0.30, jitter: 0.22 },
 };
 
-/* Formant pairs for a handful of vowel colors. Cycling through these in
-   step with the syllables is what turns beeps into something that scans
-   as speech without ever being words. */
-const VOWELS = [
-  [730, 1090],  // "ah"
-  [530, 1840],  // "eh"
-  [390, 1990],  // "ih"
-  [570, 840],   // "oh"
-  [440, 1020],  // "uh"
-  [300, 2300],  // "ee"
-];
-
 export class AudioEngine {
   constructor(settings) {
     this.settings = settings;
@@ -70,14 +60,25 @@ export class AudioEngine {
 
   /* ---------------- setup ---------------- */
 
-  /** Must be called from a user gesture. Safe to call repeatedly. */
-  async init() {
+  /**
+   * Must be called from a user gesture. Safe to call repeatedly.
+   *
+   * `context` lets a caller supply its own AudioContext -- in practice an
+   * OfflineAudioContext, so the mix can be rendered to samples and measured
+   * on a machine with no sound card at all. That is how tools/render.mjs
+   * checks that the rain is rain; see the note on `preroll` in loop().
+   */
+  async init({ context = null } = {}) {
     if (this.ready || this._failed) return this.ready;
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) { this._failed = true; return false; }
-      this.ctx = new Ctx({ latencyHint: 'interactive' });
-      if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
+      if (context) {
+        this.ctx = context;
+      } else {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) { this._failed = true; return false; }
+        this.ctx = new Ctx({ latencyHint: 'interactive' });
+        if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
+      }
       this._buildBuses();
       this._noise = this._makeNoiseBuffer(6.0);
       this.ready = true;
@@ -142,16 +143,43 @@ export class AudioEngine {
    * the master compressor -- that is part of why the room sounded like a
    * blown speaker rather than like weather.
    */
-  _makeNoiseBuffer(seconds) {
+  /**
+   * Noise, in three colours. The colour matters more than any filter put
+   * after it: white noise has equal energy per hertz, so a lowpass only bends
+   * it -- there is always hiss left at the top, and hiss at the top is what
+   * the ear files under "television static". Rain and room tone are built out
+   * of pink and brown instead, where the energy is already where it belongs.
+   *
+   *   white  -- transients, fricatives, switch clicks
+   *   pink   -- -3 dB/octave. Sheets of rain, tube grit, breath.
+   *   brown  -- -6 dB/octave. The wash on the roof, thunder bodies.
+   */
+  _makeNoiseBuffer(seconds, colour = 'white') {
     const ctx = this.ctx;
     const len = Math.floor(ctx.sampleRate * seconds);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    let last = 0, peak = 0;
+    // Paul Kellet's pink filter; b0..b6 are its running state.
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    let brown = 0, peak = 0;
     for (let i = 0; i < len; i++) {
-      const white = Math.random() * 2 - 1;
-      last = (last + 0.02 * white) / 1.02;    // a little brown in the white
-      const v = white * 0.7 + last * 2.4;
+      const w = Math.random() * 2 - 1;
+      let v;
+      if (colour === 'pink') {
+        b0 = 0.99886 * b0 + w * 0.0555179;
+        b1 = 0.99332 * b1 + w * 0.0750759;
+        b2 = 0.96900 * b2 + w * 0.1538520;
+        b3 = 0.86650 * b3 + w * 0.3104856;
+        b4 = 0.55000 * b4 + w * 0.5329522;
+        b5 = -0.7616 * b5 - w * 0.0168980;
+        v = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362;
+        b6 = w * 0.115926;
+      } else if (colour === 'brown') {
+        brown = (brown + 0.02 * w) / 1.02;
+        v = brown * 3.5;
+      } else {
+        v = w;
+      }
       d[i] = v;
       const a = Math.abs(v);
       if (a > peak) peak = a;
@@ -161,11 +189,23 @@ export class AudioEngine {
     return buf;
   }
 
-  _noiseSource(loop = true) {
+  _noiseSource(loop = true, colour = 'white') {
     const s = this.ctx.createBufferSource();
-    s.buffer = this._noise;
+    s.buffer = this._noiseOf(colour);
     s.loop = loop;
+    // A looped buffer repeats, and the ear finds the seam within about ten
+    // seconds. Detuning each source slightly means two layers never line up.
+    if (loop) s.playbackRate.value = 0.88 + Math.random() * 0.24;
     return s;
+  }
+
+  _noiseOf(colour) {
+    if (colour === 'white') return this._noise;
+    if (!this._noiseColours) this._noiseColours = new Map();
+    if (!this._noiseColours.has(colour)) {
+      this._noiseColours.set(colour, this._makeNoiseBuffer(6, colour));
+    }
+    return this._noiseColours.get(colour);
   }
 
   /* ============================================================
@@ -212,7 +252,12 @@ export class AudioEngine {
       }
       shaper.curve = curve;
       shaper.oversample = '2x';
-      tail = tail.connect(shaper);
+      /* The curve is a huge boost near zero -- that is what makes it sound
+         like an overdriven carbon microphone -- so it needs the gain taken
+         back out, or 1956 arrives ten times louder than 1999. */
+      const comp = ctx.createGain();
+      comp.gain.value = Math.min(1, 4 / (1 + amount * 0.5));
+      tail = tail.connect(shaper).connect(comp);
     }
 
     // Ring modulation -- the single most identifiably "wrong" voice treatment
@@ -314,10 +359,10 @@ export class AudioEngine {
     const lineKind = opts.line || 'clean';
     // Estimate duration the same way whether we synthesize or play a clip, so
     // the UI's line pacing does not change when real audio is dropped in.
-    const words = Math.max(1, (text || '').trim().split(/\s+/).length);
-    const syllables = Math.max(1, Math.round(estimateSyllables(text)));
     const rate = (opts.rate || 1) * profile.rate;
-    let duration = clamp(syllables * 0.20 / rate + 0.28, 0.5, 14);
+    // A rough figure for the no-audio path; the synthesizer replaces it with
+    // the real length of the line it actually laid out.
+    let duration = clamp(estimateSyllables(text) * 0.26 / rate + 0.28, 0.5, 16);
 
     if (!this.ready) {
       const timer = setTimeout(() => opts.onEnd && opts.onEnd(), duration * 1000);
@@ -364,72 +409,203 @@ export class AudioEngine {
     }
 
     // --- otherwise, synthesize ---
-    const t0 = ctx.currentTime + 0.02;
-    const sylDur = (duration - 0.20) / syllables;
-    const basePitch = profile.pitch * (opts.pitchScale || 1);
+    /* A source-filter model, driven by the actual words.
 
-    // glottal source: a pulse-ish saw plus a breath bed, formant-filtered
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
+       Three things separate this from the version that sounded like beeps,
+       and none of them is the filter quality:
+
+         1. CONSONANTS. Turbulence for the fricatives, a real closure and
+            burst for the stops, damped voicing for the nasals. Silence in
+            the middle of a word is a /t/, and the ear knows it.
+         2. TRANSITIONS. Formants RAMP between targets instead of jumping.
+            The slide is the part the ear reads as a mouth moving; a vowel
+            held still is a synthesizer no matter how well it is tuned.
+         3. A GLOTTAL SOURCE with a spectral tilt, jitter and vibrato, rather
+            than a bare sawtooth. A perfectly steady larynx is not a person.
+
+       Nothing here is meant to be intelligible. Every line arrives through a
+       300-3400Hz telephone band; the target is a voice you can hear the shape
+       of and not quite make out, which is what a handset in 1999 gave you. */
+    const plan = lineToSegments(text, { rate });
+    const segments = plan.segments;
+    duration = clamp(plan.duration + 0.18, 0.4, 20);
+
+    const t0 = ctx.currentTime + 0.02;
+    const basePitch = profile.pitch * (opts.pitchScale || 1);
+    const fScale = profile.formant;
+
+    /* ---- the larynx ---- */
+    const glottis = ctx.createOscillator();
+    glottis.type = 'sawtooth';
+    // Vibrato: small, slow, and never quite regular. Without it the pitch
+    // reads as a test tone the moment a vowel is held for more than 100ms.
+    const vib = ctx.createOscillator();
+    vib.type = 'sine';
+    vib.frequency.value = 4.6 + Math.random() * 1.4;
+    const vibGain = ctx.createGain();
+    vibGain.gain.value = basePitch * (0.006 + profile.jitter * 0.05);
+    vib.connect(vibGain).connect(glottis.frequency);
+
+    // Spectral tilt. A real glottal pulse is nothing like a sawtooth above
+    // about 2kHz, and the difference is most of the buzz.
+    const tilt = ctx.createBiquadFilter();
+    tilt.type = 'lowpass';
+    tilt.frequency.value = 2200;
+    tilt.Q.value = 0.3;
+    const voiceGain = ctx.createGain();
+    voiceGain.gain.value = 0.0001;
+    glottis.connect(tilt).connect(voiceGain);
+
+    // Gravel: a half-rate square under the fundamental. A worn voice is a
+    // larynx that does not close cleanly, which is a subharmonic.
     const sub = ctx.createOscillator();
     sub.type = 'square';
-    const oscGain = ctx.createGain();
-    oscGain.gain.value = 0;
     const subGain = ctx.createGain();
-    subGain.gain.value = 0.18 * profile.gravel;
+    subGain.gain.value = 0.10 * profile.gravel;
+    sub.connect(subGain).connect(tilt);
 
-    const breath = this._noiseSource(true);
-    const breathFilter = ctx.createBiquadFilter();
-    breathFilter.type = 'bandpass';
-    breathFilter.frequency.value = 1900;
-    breathFilter.Q.value = 0.7;
-    const breathGain = ctx.createGain();
-    breathGain.gain.value = 0;
-
-    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 7;
-    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 9;
-    const mixF = ctx.createGain();
-
-    osc.connect(oscGain);
-    sub.connect(subGain).connect(oscGain);
-    oscGain.connect(f1).connect(mixF);
-    oscGain.connect(f2).connect(mixF);
-    breath.connect(breathFilter).connect(breathGain).connect(mixF);
-    mixF.connect(chain.input);
-
-    // Prosody: a falling contour across the line, lifted at a question mark.
-    const isQuestion = /\?\s*$/.test(text || '');
-    let t = t0;
-    for (let i = 0; i < syllables; i++) {
-      const frac = i / Math.max(1, syllables - 1);
-      const vowel = VOWELS[(i * 7 + text.length) % VOWELS.length];
-      const contour = isQuestion ? (0.92 + frac * 0.28) : (1.06 - frac * 0.22);
-      const jitter = 1 + (Math.random() - 0.5) * profile.jitter;
-      const p = basePitch * contour * jitter;
-
-      osc.frequency.setValueAtTime(p, t);
-      sub.frequency.setValueAtTime(p * 0.5, t);
-      f1.frequency.setValueAtTime(vowel[0] * profile.formant, t);
-      f2.frequency.setValueAtTime(vowel[1] * profile.formant, t);
-
-      // amplitude envelope per syllable, with a consonant-ish attack
-      const a = sylDur * 0.22, d = sylDur * 0.78;
-      oscGain.gain.setValueAtTime(0.0001, t);
-      oscGain.gain.exponentialRampToValueAtTime(0.30, t + a);
-      oscGain.gain.exponentialRampToValueAtTime(0.02, t + a + d);
-      breathGain.gain.setValueAtTime(0.0001, t);
-      breathGain.gain.linearRampToValueAtTime(0.05 * profile.breath, t + a * 0.6);
-      breathGain.gain.linearRampToValueAtTime(0.004, t + a + d);
-      t += sylDur;
+    /* ---- the tract: three formants in parallel ---- */
+    const formants = [
+      { q: 9, gain: 1.00 },
+      { q: 11, gain: 0.62 },
+      { q: 13, gain: 0.28 },
+    ].map((spec) => {
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = spec.q;
+      const g = ctx.createGain();
+      g.gain.value = spec.gain;
+      f.connect(g);
+      return { filter: f, gain: g };
+    });
+    const tract = ctx.createGain();
+    for (const f of formants) {
+      voiceGain.connect(f.filter);
+      f.gain.connect(tract);
     }
-    oscGain.gain.setTargetAtTime(0, t, 0.04);
-    breathGain.gain.setTargetAtTime(0, t, 0.04);
+    // A little of the source straight through keeps the low end that a pure
+    // parallel formant bank throws away.
+    const direct = ctx.createGain();
+    direct.gain.value = 0.18;
+    voiceGain.connect(direct).connect(tract);
 
-    osc.start(t0); sub.start(t0); breath.start(t0);
-    const endAt = t + 0.18;
-    osc.stop(endAt); sub.stop(endAt); breath.stop(endAt);
-    stops.push(() => { try { osc.stop(); sub.stop(); breath.stop(); } catch {} });
-    osc.onended = finish;
+    /* ---- turbulence: fricatives, bursts and breath ---- */
+    const noise = this._noiseSource(true);
+    const fric = ctx.createBiquadFilter();
+    fric.type = 'bandpass';
+    fric.frequency.value = 4000;
+    fric.Q.value = 1.4;
+    const fricGain = ctx.createGain();
+    fricGain.gain.value = 0.0001;
+    noise.connect(fric).connect(fricGain).connect(tract);
+
+    // Breath rides under everything, louder for a whisper or a chest cold.
+    const breath = this._noiseSource(true, 'pink');
+    const breathBand = ctx.createBiquadFilter();
+    breathBand.type = 'bandpass';
+    breathBand.frequency.value = 1700;
+    breathBand.Q.value = 0.6;
+    const breathGain = ctx.createGain();
+    breathGain.gain.value = 0.0001;
+    breath.connect(breathBand).connect(breathGain).connect(tract);
+
+    /* One trim for the whole voice. Three formants, a direct path and a
+       turbulence channel all sum here, and the 1956 line chain has a
+       waveshaper after it -- without this the older eras clip. */
+    const trim = ctx.createGain();
+    trim.gain.value = 0.42;
+    tract.connect(trim).connect(chain.input);
+
+    /* ---- schedule the line ---- */
+    const TRANS = 0.035;                 // how long a formant takes to move
+    let t = t0;
+    // Start the tract somewhere neutral so the first sound slides in.
+    for (let i = 0; i < 3; i++) {
+      formants[i].filter.frequency.setValueAtTime([500, 1500, 2500][i] * fScale, t0);
+    }
+
+    for (const seg of segments) {
+      const sound = seg.sound ? SOUNDS[seg.sound] : null;
+      const end = t + seg.dur;
+
+      if (!sound) {
+        // A pause: let the voicing fall away rather than cutting it.
+        voiceGain.gain.setTargetAtTime(0.0001, t, 0.020);
+        fricGain.gain.setTargetAtTime(0.0001, t, 0.015);
+        breathGain.gain.setTargetAtTime(0.0001, t, 0.030);
+        t = end;
+        continue;
+      }
+
+      // Formants slide to this sound's targets. This is the whole trick.
+      for (let i = 0; i < 3; i++) {
+        formants[i].filter.frequency.linearRampToValueAtTime(
+          clamp(sound.f[i] * fScale, 90, 7000), t + TRANS);
+      }
+
+      // Pitch: contour, plus jitter, moved rather than stepped.
+      const p = clamp(basePitch * seg.pitch * (1 + (Math.random() - 0.5) * profile.jitter), 60, 420);
+      glottis.frequency.linearRampToValueAtTime(p, t + Math.min(0.06, seg.dur));
+      sub.frequency.linearRampToValueAtTime(p * 0.5, t + Math.min(0.06, seg.dur));
+
+      const amp = 0.34 * sound.amp;
+      switch (sound.kind) {
+        case 'stop': {
+          /* Closure, then release. The silence is what makes it a stop --
+             an instantaneous burst with no closure in front of it just
+             sounds like a click in the middle of a vowel. */
+          const closure = Math.min(seg.dur * 0.62, 0.055);
+          voiceGain.gain.setTargetAtTime(sound.voiced ? 0.03 : 0.0001, t, 0.008);
+          fricGain.gain.setValueAtTime(0.0001, t);
+          const burst = t + closure;
+          fric.frequency.setValueAtTime(sound.noise[0], burst);
+          fric.Q.setValueAtTime(sound.noise[1], burst);
+          fricGain.gain.setTargetAtTime(0.30 * sound.amp, burst, 0.004);
+          fricGain.gain.setTargetAtTime(0.0001, burst + 0.018, 0.012);
+          // Voicing comes back in for the next sound, slightly late: that
+          // lag is what a plosive sounds like.
+          voiceGain.gain.setTargetAtTime(amp, burst + 0.012, 0.018);
+          break;
+        }
+        case 'fric': {
+          fric.frequency.setValueAtTime(sound.noise[0], t);
+          fric.Q.setValueAtTime(sound.noise[1], t);
+          fricGain.gain.setTargetAtTime(0.26 * sound.amp, t, 0.012);
+          fricGain.gain.setTargetAtTime(0.0001, end - 0.015, 0.012);
+          voiceGain.gain.setTargetAtTime(sound.voiced ? amp * 0.55 : 0.002, t, 0.015);
+          break;
+        }
+        case 'nasal': {
+          // Mouth shut: quiet, dark, and no turbulence at all.
+          fricGain.gain.setTargetAtTime(0.0001, t, 0.010);
+          voiceGain.gain.setTargetAtTime(amp * 0.7, t, 0.020);
+          break;
+        }
+        default: {
+          // Vowels and liquids: open the larynx, shut the noise.
+          fricGain.gain.setTargetAtTime(0.0001, t, 0.012);
+          voiceGain.gain.setTargetAtTime(amp, t, seg.stress ? 0.014 : 0.022);
+          // Let it sag before the next sound so syllables have shape.
+          voiceGain.gain.setTargetAtTime(amp * 0.72, end - 0.030, 0.030);
+          breathGain.gain.setTargetAtTime(0.020 * profile.breath, t, 0.030);
+          break;
+        }
+      }
+      t = end;
+    }
+
+    // Tail off. A voice that stops dead has been edited, not finished.
+    voiceGain.gain.setTargetAtTime(0.0001, t, 0.035);
+    fricGain.gain.setTargetAtTime(0.0001, t, 0.020);
+    breathGain.gain.setTargetAtTime(0.0001, t + 0.04, 0.050);
+
+    const endAt = t + 0.22;
+    glottis.start(t0); sub.start(t0); vib.start(t0); noise.start(t0); breath.start(t0);
+    glottis.stop(endAt); sub.stop(endAt); vib.stop(endAt); noise.stop(endAt); breath.stop(endAt);
+    stops.push(() => {
+      try { glottis.stop(); sub.stop(); vib.stop(); noise.stop(); breath.stop(); } catch {}
+    });
+    glottis.onended = finish;
     guard = setTimeout(finish, (duration + 2) * 1000);
     this._live.add(finish);
 
@@ -586,6 +762,11 @@ export class AudioEngine {
     out.gain.value = opts.volume ?? 0.5;
     const stops = [];
 
+    /* `handle` does not exist until after this switch, so a loop that needs
+       to seed its own scheduling state leaves a callback here and it runs
+       once the handle is built and registered. */
+    let afterHandle = null;
+
     const startNoise = (filterType, freq, q, gain, dest) => {
       const s = this._noiseSource(true);
       const f = ctx.createBiquadFilter();
@@ -599,60 +780,164 @@ export class AudioEngine {
 
     switch (name) {
       case 'rain': {
-        /* Steady filtered noise is not rain. It is static, which is exactly
-           what the first version of this sounded like.
+        /* Rain, not static.
 
-           Rain has three things static does not: a low wash with almost no
-           top end, slow GUSTS that move the whole level around, and discrete
-           DROPLETS hitting glass. The droplets are what the ear uses to
-           decide it is hearing weather, so they matter more than the bed. */
+           The first two attempts both came out as television hiss, and for
+           the same reason each time: a steady bed of WHITE noise. White noise
+           carries as much energy at 8kHz as at 80Hz, so no amount of lowpass
+           filtering removes the hiss -- it only tilts it -- and a bed whose
+           level never moves has no weather in it at all.
 
-        // the wash on the roof -- almost all of the energy, almost none of
-        // the brightness
-        const wash = startNoise('lowpass', 420, 0.6, 0.95, out);
-        // the body
-        const body = startNoise('bandpass', 1150, 0.35, 0.30, out);
-        // a little sheet-hiss on the glass, kept well down
-        const hiss = startNoise('highpass', 3600, 0.4, 0.030, out);
+           What the ear actually uses to decide it is hearing rain:
+             1. DARKNESS      -- brown noise, rolled off twice. Rain on a flat
+                                 roof is nearly all low mid.
+             2. IRREGULARITY  -- the level has to wander. Not an LFO, which is
+                                 periodic and reads as an effect; a random walk
+                                 re-aimed every half second or so.
+             3. DROPLETS      -- discrete, resonant, and LOUD relative to the
+                                 bed. These are the whole thing. A recording of
+                                 rain with the transients removed is static.
+             4. GUSTS         -- occasional swells that move the level and the
+                                 droplet density together.
+           Nothing here is a steady source at a fixed gain. */
 
-        // Gusts: two slow LFOs at unrelated rates so the pattern never
-        // audibly repeats.
-        for (const [rate, depth, target] of [[0.043, 0.30, wash.gain.gain], [0.071, 0.10, body.gain.gain]]) {
-          const lfo = ctx.createOscillator();
-          lfo.type = 'sine'; lfo.frequency.value = rate;
-          const amt = ctx.createGain(); amt.gain.value = depth;
-          lfo.connect(amt).connect(target);
-          lfo.start();
-          stops.push(() => { try { lfo.stop(); } catch {} });
-        }
+        // 1. the wash on the roof: brown, and rolled off twice
+        const wash = this._noiseSource(true, 'brown');
+        const wlp1 = ctx.createBiquadFilter();
+        wlp1.type = 'lowpass'; wlp1.frequency.value = 480; wlp1.Q.value = 0.4;
+        const wlp2 = ctx.createBiquadFilter();
+        wlp2.type = 'lowpass'; wlp2.frequency.value = 700; wlp2.Q.value = 0.7;
+        const whp = ctx.createBiquadFilter();
+        whp.type = 'highpass'; whp.frequency.value = 70; whp.Q.value = 0.5;
+        /* The wash is the FLOOR, not the sound. Every earlier version had it
+           at full level, which buried the droplets and left exactly the
+           featureless bed that reads as static. */
+        const washGain = ctx.createGain(); washGain.gain.value = 0.42;
+        wash.connect(whp).connect(wlp1).connect(wlp2).connect(washGain);
+        wash.start();
+        stops.push(() => { try { wash.stop(); } catch {} });
 
-        // Droplets on the window. Scheduled a second ahead in batches so the
-        // timing is sample-accurate rather than at the mercy of setTimeout.
+        // 2. the sheet against the glass: pink, narrow, and never steady
+        const sheet = this._noiseSource(true, 'pink');
+        const sbp = ctx.createBiquadFilter();
+        sbp.type = 'bandpass'; sbp.frequency.value = 1250; sbp.Q.value = 0.9;
+        const slp = ctx.createBiquadFilter();
+        slp.type = 'lowpass'; slp.frequency.value = 3400; slp.Q.value = 0.5;
+        const sheetGain = ctx.createGain(); sheetGain.gain.value = 0.16;
+        sheet.connect(sbp).connect(slp).connect(sheetGain);
+        sheet.start();
+        stops.push(() => { try { sheet.stop(); } catch {} });
+
+        // Both beds pass through one gust stage, so a swell moves the whole
+        // weather rather than one layer of it.
+        const gust = ctx.createGain(); gust.gain.value = 1;
+        washGain.connect(gust);
+        sheetGain.connect(gust);
+        gust.connect(out);
+
         const dropBus = ctx.createGain();
-        dropBus.gain.value = 0.9;
+        dropBus.gain.value = 1.0;
         dropBus.connect(out);
-        const schedule = () => {
-          if (!this.loops.has('rain')) return;
-          const until = ctx.currentTime + 1.2;
-          while (handle._nextDrop < until) {
-            const t = Math.max(ctx.currentTime, handle._nextDrop);
-            const src = this._noiseSource(false);
-            const f = ctx.createBiquadFilter();
-            f.type = 'bandpass';
-            f.frequency.value = 900 + Math.random() * 3200;
-            f.Q.value = 3 + Math.random() * 7;
-            const g = ctx.createGain();
-            const peak = 0.05 + Math.random() * 0.16;
-            g.gain.setValueAtTime(0.0001, t);
-            g.gain.exponentialRampToValueAtTime(peak, t + 0.002);
-            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random() * 0.05);
-            src.connect(f).connect(g).connect(dropBus);
-            src.start(t); src.stop(t + 0.12);
-            handle._nextDrop += 0.018 + Math.random() * 0.075;
+
+        /* One scheduler drives all three moving parts, a second ahead, so the
+           timing is sample-accurate instead of at the mercy of setTimeout. */
+        /* Three kinds of impact, because rain on a window is three sounds:
+             far   -- the dense field. Individually inaudible, collectively
+                      the texture that sits on top of the wash.
+             tick  -- a drop on the glass. High, short, and it RINGS.
+             near  -- one that hits right in front of you. Rare, loud, and the
+                      reason the ear says "weather" instead of "noise".
+           The first version made every drop the same size, which averages out
+           to a bed -- which is to say, to static. */
+        const drop = (t, kind) => {
+          const src = this._noiseSource(false);
+          const f = ctx.createBiquadFilter();
+          f.type = 'bandpass';
+          let peak, decay;
+          if (kind === 'tick') {
+            f.frequency.value = 2400 + Math.random() * 3400;
+            f.Q.value = 7 + Math.random() * 11;
+            peak = 0.055 + Math.random() * 0.120;
+            decay = 0.007 + Math.random() * 0.018;
+          } else if (kind === 'near') {
+            f.frequency.value = 520 + Math.random() * 1900;
+            f.Q.value = 6 + Math.random() * 9;
+            peak = 0.16 + Math.random() * 0.30;
+            decay = 0.045 + Math.random() * 0.110;
+          } else {
+            f.frequency.value = 560 + Math.random() * 1100;
+            f.Q.value = 2 + Math.random() * 4;
+            const r = Math.random();
+            peak = 0.012 + r * r * 0.055;
+            decay = 0.020 + Math.random() * 0.060;
           }
-          handle._timer = setTimeout(schedule, 700);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(Math.max(0.002, peak), t + 0.0015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+          src.connect(f).connect(g).connect(dropBus);
+          src.start(t); src.stop(t + decay + 0.05);
         };
-        setTimeout(() => { handle._nextDrop = ctx.currentTime + 0.1; schedule(); }, 0);
+
+        /* Everything is scheduled on absolute times, which means the same
+           code can run a rolling window in real time or lay down the whole
+           thing at once for an offline render. `preroll` picks. */
+        const schedule = () => {
+          if (!handle._preroll && !this.loops.has('rain')) return;
+          const now = ctx.currentTime;
+          const until = now + (handle._preroll || 1.2);
+
+          // --- gusts: a swell every few seconds, never on a beat ---
+          while (handle._gustAt < until) {
+            const t = Math.max(now, handle._gustAt);
+            const up = 1.6 + Math.random() * 2.6;
+            const down = 2.4 + Math.random() * 4.0;
+            const peak = 1.0 + Math.random() * 0.55;
+            const rest = 0.72 + Math.random() * 0.2;
+            gust.gain.setValueAtTime(handle._gustLevel, t);
+            gust.gain.linearRampToValueAtTime(peak, t + up);
+            gust.gain.linearRampToValueAtTime(rest, t + up + down);
+            handle._gustLevel = rest;
+            handle._gustAt = t + up + down + Math.random() * 3;
+            handle._density = peak;          // it rains harder in a gust
+          }
+
+          // --- the sheet wanders on its own, faster than the gusts ---
+          while (handle._walkAt < until) {
+            const t = Math.max(now, handle._walkAt);
+            sheetGain.gain.setTargetAtTime(0.09 + Math.random() * 0.17, t, 0.25);
+            handle._walkAt = t + 0.35 + Math.random() * 0.7;
+          }
+
+          // --- the dense field, and the ticks on the glass ---
+          while (handle._nextDrop < until) {
+            const t = Math.max(now, handle._nextDrop);
+            drop(t, Math.random() < 0.30 ? 'tick' : 'far');
+            // ~26-70 impacts a second, scaled by how hard it is coming down
+            handle._nextDrop += (0.012 + Math.random() * 0.026) / Math.max(0.6, handle._density);
+          }
+
+          // --- and the ones that land right in front of you ---
+          while (handle._nearDrop < until) {
+            drop(Math.max(now, handle._nearDrop), 'near');
+            handle._nearDrop += (0.10 + Math.random() * 0.26) / Math.max(0.6, handle._density);
+          }
+          if (!handle._preroll) handle._timer = setTimeout(schedule, 600);
+        };
+        /* An offline render has no setTimeout worth the name -- rendering
+           finishes before any of them fire -- so `preroll` lays the whole
+           window down at once and never re-arms. */
+        afterHandle = () => {
+          const t0 = ctx.currentTime;
+          handle._nextDrop = t0 + 0.05;
+          handle._nearDrop = t0 + 0.12;
+          handle._gustAt = t0 + 1.2;
+          handle._walkAt = t0;
+          handle._density = 1;
+          handle._gustLevel = 1;
+          handle._preroll = opts.preroll || 0;
+          schedule();
+        };
         stops.push(() => clearTimeout(handle._timer));
 
         out.connect(this.buses.ambience);
@@ -752,6 +1037,12 @@ export class AudioEngine {
       gain: out,
       _timer: null,
       _nextDrop: 0,
+      _nearDrop: 0,
+      _gustAt: 0,
+      _walkAt: 0,
+      _density: 1,
+      _gustLevel: 1,
+      _preroll: 0,
       setVolume: (v, ramp = 0.2) => {
         out.gain.setTargetAtTime(v, ctx.currentTime, ramp);
       },
@@ -765,6 +1056,7 @@ export class AudioEngine {
       },
     };
     this.loops.set(name, handle);
+    if (afterHandle) afterHandle();
     return handle;
   }
 

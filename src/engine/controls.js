@@ -13,7 +13,7 @@
    "CROSS" on a PlayStation one without any screen knowing which
    is plugged in.
 
-   FUNCTION KEYS: the terminal's screens are on 1-6, not F1-F6.
+   FUNCTION KEYS: the terminal's screens are on 1-5, not F1-F6.
    On most laptops the function row needs an Fn chord, which made
    the terminal effectively unusable without a desktop keyboard.
    F1-F6 are kept as aliases for people who have them.
@@ -55,14 +55,14 @@ export const ACTIONS = {
   /* ---------------- the desk ---------------- */
   terminal: { keys: ['KeyT', 'PadSelect'], pad: [8], labels: { kbm: 'T', xbox: 'VIEW', playstation: 'SHARE' } },
   stand: { keys: ['KeyQ', 'PadL3'], pad: [10], labels: { kbm: 'Q', xbox: 'L3', playstation: 'L3' } },
-  screenPrev: { keys: ['PadLB'], pad: [4], labels: { kbm: '1-6', xbox: 'LB', playstation: 'L1' } },
-  screenNext: { keys: ['PadRB'], pad: [5], labels: { kbm: '1-6', xbox: 'RB', playstation: 'R1' } },
-  screens: { keys: [], pad: [], labels: { kbm: '1 - 6', xbox: 'LB / RB', playstation: 'L1 / R1' } },
+  screenPrev: { keys: ['PadLB'], pad: [4], labels: { kbm: '1-5', xbox: 'LB', playstation: 'L1' } },
+  screenNext: { keys: ['PadRB'], pad: [5], labels: { kbm: '1-5', xbox: 'RB', playstation: 'R1' } },
+  screens: { keys: [], pad: [], labels: { kbm: '1 - 5', xbox: 'LB / RB', playstation: 'L1 / R1' } },
   /* Two screen jumps phrased to sit inside a sentence, because the tutorial
      has to say "go to accounts" out loud and a number key is not a shoulder
      button. These are label-only: the real bindings are `screens` above. */
-  screenAccounts: { keys: [], pad: [], labels: { kbm: 'press 2', xbox: 'LB / RB to ACCOUNTS', playstation: 'L1 / R1 to ACCOUNTS' } },
-  screenTickets: { keys: [], pad: [], labels: { kbm: 'press 3', xbox: 'LB / RB to TICKETS', playstation: 'L1 / R1 to TICKETS' } },
+  screenAccounts: { keys: [], pad: [], labels: { kbm: 'press 3', xbox: 'LB / RB to ACCOUNTS', playstation: 'L1 / R1 to ACCOUNTS' } },
+  screenTickets: { keys: [], pad: [], labels: { kbm: 'press 2', xbox: 'LB / RB to TICKETS', playstation: 'L1 / R1 to TICKETS' } },
   newTicket: { keys: ['KeyN'], pad: [], labels: { kbm: 'N', xbox: 'N', playstation: 'N' } },
   hazard: { keys: ['KeyH'], pad: [], labels: { kbm: 'H', xbox: 'H', playstation: 'H' } },
 
@@ -120,7 +120,7 @@ export function expand(text, scheme = 'kbm') {
   return String(text == null ? '' : text).replace(TOKEN, (m, a) => (ACTIONS[a] ? label(a, scheme) : m));
 }
 
-/** Terminal screens are 1-6; F1-F6 remain as aliases. */
+/** Terminal screens are on the number row; F1-F6 remain as aliases. */
 export const SCREEN_KEYS = [
   ['Digit1', 'F1'], ['Digit2', 'F2'], ['Digit3', 'F3'],
   ['Digit4', 'F4'], ['Digit5', 'F5'], ['Digit6', 'F6'],

@@ -143,11 +143,21 @@ html, body {
 @keyframes objPulse { 50% { border-left-color: transparent; border-right-color: transparent; opacity: 0.72; } }
 
 /* ---------------- call panel ---------------- */
+/* The layer itself must NOT take clicks: it covers the whole screen, and a
+   click that lands here never reaches the canvas -- which is where a denied
+   pointer lock gets re-acquired. That is what killed the camera after leaving
+   the terminal while a call was up. Only the panel itself is clickable. */
 #call {
-  pointer-events: all;
+  pointer-events: none;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: 0 0 1.6cqh;
 }
+#call-head, #call-body, #call-choices, #call-keys { pointer-events: all; }
+
+/* A unit listed underneath the ticket it would be sent to. The indent and the
+   rule are the only thing saying "these belong to that", so they matter. */
+.t-item.nest, .t-cols.nest { margin-left: 4cqw; border-left: 1px solid rgba(255, 182, 65, 0.18); }
+.t-cols.nest { padding-left: 1cqw; }
 /* Docked to the bottom of the screen under the terminal, and drawn in the
    terminal's own amber so it reads as part of the same desk. */
 #cabinet.in-terminal #call { padding-bottom: 1.2cqh; }
@@ -230,7 +240,11 @@ html, body {
 }
 /* A live call docks under the terminal rather than over it. The terminal
    gives up the room instead of the conversation being hidden. */
-#cabinet.on-call #crt { padding-bottom: 27cqh; }
+/* The terminal gets out of the way of the call panel by exactly as much as
+   the panel actually needs. A fixed reservation was wrong the moment a caller
+   offered four replies instead of two, and the terminal's key line went under
+   the panel. CallUI measures itself and sets --call-h. */
+#cabinet.on-call #crt { padding-bottom: calc(var(--call-h, 27cqh) + 1.5cqh); }
 #crt-frame {
   position: relative;
   width: min(100%, 148cqh);

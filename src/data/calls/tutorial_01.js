@@ -103,9 +103,9 @@ export default {
     lookup_ask: {
       speaker: 'caller',
       lines: [
-        { text: "Accounts is the second screen along the top. Type a name, a number, a street — it isn't fussy." },
-        { text: "Try somebody. Przybylski, out on Quarry Road. P-R-Z. Pull the record up and look at it." },
-        { text: "I want you in the habit before it matters.", stage: 'and it is going to matter' },
+        { text: "When it's a customer on the line, the number comes up and it finds the account by itself. You won't have to type a thing." },
+        { text: "I'm ringing from the office, so there's nothing for it to find. Which is the other half of the lesson: ACCOUNTS, and search." },
+        { text: "Try somebody. Przybylski, out on Quarry Road. P-R-Z. Pull the record up and look at it.", stage: 'and it is going to matter' },
       ],
       next: 'wait_lookup',
     },
@@ -114,7 +114,7 @@ export default {
     wait_lookup: {
       speaker: 'caller',
       waitFor: { anyLookup: true },
-      hint: 'LOOK UP AN ACCOUNT — {screenAccounts}, type a name, {select}, then {select} again to open it',
+      hint: 'LOOK SOMEBODY UP — {screenAccounts}, type a name, {select}, then {select} to open it',
       next: 'lookup_done',
     },
 
@@ -137,7 +137,7 @@ export default {
       lines: [
         { text: "Right. There's an actual job waiting on you, so let's do it together." },
         { text: "Day office took a call before they went home and never wrote it up. Tree down across the primary on County Road Eighteen, south end. That's circuit MH-14." },
-        { text: "Tickets is the third screen. Start a new one, pick the cause off the list, and open it." },
+        { text: "N starts one, from wherever you are. Pick the cause off the list and open it." },
       ],
       effects: [{ op: 'flag', name: 'told_about_tree' }],
       next: 'wait_ticket',
@@ -147,7 +147,7 @@ export default {
     wait_ticket: {
       speaker: 'caller',
       waitFor: { flags: ['created_a_ticket'] },
-      hint: 'OPEN A TROUBLE TICKET — {screenTickets}, then {newTicket}, choose a cause, then {select}',
+      hint: 'OPEN A TROUBLE TICKET — press {newTicket}, choose a cause, then {select}',
       next: 'ticket_done',
     },
 
@@ -155,7 +155,7 @@ export default {
       speaker: 'caller',
       lines: [
         { text: "Good. That ticket is the whole job, by the way. Everything else is paperwork about that ticket." },
-        { text: "Now put somebody on it. Opening the ticket takes you to units." },
+        { text: "It's already showing you the units underneath it, and it's already guessed. It guesses well. It is still a guess." },
         { text: "You'll see three. Halloran in Seven, Sikes and Day in Twelve, and a line crew that is at home in bed and will let you know about it." },
       ],
       next: 'dispatch_ask',
@@ -176,7 +176,7 @@ export default {
     wait_dispatch: {
       speaker: 'caller',
       waitFor: { anyCrewDispatched: true },
-      hint: 'DISPATCH A UNIT — select the ticket, choose a unit, {select}',
+      hint: 'DISPATCH A UNIT — choose a unit under the ticket, then {select}',
       next: 'dispatch_done',
     },
 

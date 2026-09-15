@@ -27,6 +27,7 @@ export class CallUI {
     this.input = input;
     this.el = {
       root: $('call'),
+      head: $('call-head'),
       who: $('call-who'),
       meta: $('call-meta'),
       stage: $('call-stage'),
@@ -68,6 +69,27 @@ export class CallUI {
     });
   }
 
+  /**
+   * Tell the terminal how much room this panel needs.
+   *
+   * The panel is bottom-anchored inside a full-screen layer, so its own box
+   * is the whole viewport and useless to measure; what matters is where its
+   * top edge lands. Measured on the next frame, after layout.
+   */
+  _measure() {
+    if (this._measuring) return;
+    this._measuring = true;
+    requestAnimationFrame(() => {
+      this._measuring = false;
+      const cabinet = document.getElementById('cabinet');
+      if (!cabinet) return;
+      if (!this.visible) { cabinet.style.removeProperty('--call-h'); return; }
+      const top = this.el.head.getBoundingClientRect().top;
+      const h = Math.max(0, Math.round(cabinet.getBoundingClientRect().bottom - top));
+      cabinet.style.setProperty('--call-h', `${h}px`);
+    });
+  }
+
   open(call) {
     this.visible = true;
     this.el.root.classList.remove('hidden');
@@ -81,6 +103,7 @@ export class CallUI {
     this.el.choices.innerHTML = '';
     this.choices = [];
     this.renderKeys();
+    this._measure();
   }
 
   close(held = false) {
@@ -91,6 +114,7 @@ export class CallUI {
     if (this._speaking) { this._speaking.stop(); this._speaking = null; }
     this._timer = 0;
     this._pendingPlayerLine = false;
+    this._measure();
   }
 
   /** Render and speak one line. */
@@ -124,6 +148,7 @@ export class CallUI {
     } else {
       this._timer = (p.pause ?? 0.25) + (speakable ? minRead : 0.9);
     }
+    this._measure();
   }
 
   showChoices(list) {
@@ -143,6 +168,7 @@ export class CallUI {
       + `<span>${escapeHtml(c.text)}</span></li>`
     )).join('');
     this.renderKeys();
+    this._measure();
   }
 
   /** The key line under the panel, in whatever the player is holding. */

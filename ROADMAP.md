@@ -21,6 +21,11 @@ result was checked, not assumed.
 - [x] Named material library with a one-call path to replace any recipe with art
 - [x] Static geometry merging (907 meshes → 383 draw calls)
 - [x] Full WebAudio synthesis: no audio files ship
+- [x] A speech synthesizer driven by the text: spelling -> phonemes, three
+      sliding formants, fricative turbulence, stop closures and bursts,
+      phrase contour with stress and question rises
+- [x] Offline audio rendering and envelope measurement (`tools/render.mjs`),
+      which is the only way to tell rain from static without a sound card
 - [x] Input with world / UI mode separation and pointer lock, one binding
       table (`engine/controls.js`), and **gamepad support** — pad buttons fold
       into the same key set, Xbox / PlayStation button art chosen from the
@@ -61,7 +66,9 @@ result was checked, not assumed.
 - [x] Crew dispatch with skill matching, ETA and a stated reason per unit
 - [x] Field simulation: crews drive, arrive, work and clear in shift minutes
 - [x] Radio with queued traffic, squelch, per-crew voices and interference
-- [x] CRT terminal: 6 screens (menu, accounts, tickets, map, dispatch, log)
+- [x] CRT terminal: 5 screens (call, tickets+dispatch, accounts, map, log), with
+      caller ID doing the lookup and dispatch folded into the ticket list —
+      a whole call is 7 keypresses and no typing
 - [x] Story scheduler with beat / time / random calls and a mundane-debt rhythm
 - [x] 13 horror events across three escalation tiers
 - [x] Checkpoint save at every story beat
@@ -72,12 +79,14 @@ result was checked, not assumed.
       reading), opaque takeover, locked camera, clickable rows and tabs
 - [x] **A live call docked under the terminal**, with the arrow keys handed
       between the two panels so neither the caller nor the terminal can be
-      locked out, and the panel that has them saying so
+      locked out, the panel that has them saying so, and the terminal giving
+      up exactly as much room as the panel needs
 - [x] Written instructions that name the player's actual controls: hints carry
       `{action}` tokens and are expanded per input family at display time
 - [x] 14 call scripts — 238 nodes, 420 lines, 169 player replies
 - [x] The full slice runs start to finish: 29/29 playthrough assertions pass,
-      21/21 tutorial assertions, 28/28 control assertions
+      22/22 tutorial assertions, 29/29 control assertions, 21/21 audio-render
+      assertions
 
 ---
 
@@ -113,9 +122,11 @@ result was checked, not assumed.
    baked pool on the floor. Fixtures near the player hold a real pooled light
    and flicker correctly, so this is only visible across the room during a
    brownout.
-4. **No audio device in CI.** The graph is now *measured* — `tools/audio.mjs`
-   taps the buses and asserts levels, spectral balance and that voice chains
-   are released — but nothing has actually listened to it.
+4. **No audio device in CI.** The mix is now rendered offline to real WAVs and
+   measured properly (`tools/render.mjs`: envelope variation, crest factor,
+   onsets per second, band split), and those files can be listened to outside
+   the container — but nothing in the loop that writes the code can hear them.
+   Both audio bugs so far passed the numeric checks that existed at the time.
 5. The **`_updateStanding` method on `Player`** is vestigial — standing works,
    but it eases through `update()` rather than that method.
 6. The **horror `degrade` and `tunnel` events restore the grade with a
@@ -179,13 +190,25 @@ The pipeline is finished and unused. Recording even the 30 lines of
 ### 5. Terminal depth
 * an account-history screen (the microfilm cartons in Records are a promise)
 * the ability to *edit* a record, so the player can watch their own edit change
+* the CALL screen should show a returning caller's previous tickets inline —
+  Mrs. Daley calling back is the obvious case, and it is one query
 
 ### 6. The building at night
 * working doors, with the records room lockable
 * a light-switch interaction, so darkness can be the player's own fault
 * a second floor or a basement for the equipment room the conduit implies
 
-### 7. Controls polish
+### 7. The voices, one more pass
+The synthesizer has consonants and transitions now, which is the difference
+between beeps and speech, but it is still not a person. The next gains are:
+* coarticulation — a vowel's targets should be pulled toward its neighbours
+* a proper glottal pulse shape (LF model) instead of a filtered sawtooth
+* per-character prosody: Merrick interrupts, Daley trails off, Ott takes his
+  time. The data is already per-character; the contour is not
+* and the real answer is still item 4: recordings. `clip:` on a line already
+  plays one, so that is a content problem, not a code problem
+
+### 8. Controls polish
 * a rebinding UI over the `ACTIONS` table (the data is already shaped for it)
 * stick sensitivity, dead zone and invert-Y in Options
 * an on-screen keyboard for the account search, so a pad can finish a shift
@@ -193,7 +216,7 @@ The pipeline is finished and unused. Recording even the 30 lines of
 * test on a real controller: dead zones, trigger rest values, and whether a
   DualSense reports an id the scheme detector recognises
 
-### 8. Confirm the performance work on a GPU
+### 9. Confirm the performance work on a GPU
 The structural fixes are in (see Known problems 1). What remains is measurement:
 run `F3` on real hardware at each preset, confirm the adaptive scaler settles
 where it should, and profile the rain and wet-glass shaders, which are the

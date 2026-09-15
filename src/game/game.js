@@ -189,7 +189,7 @@ export class Game {
     this.terminal = new Terminal({
       database: this.database, outages: this.outages, crews: this.crews,
       dispatcher: this.dispatcher, clock: this.clock, state: this.gameState,
-      audio: this.audio, world: this.world,
+      audio: this.audio, world: this.world, phone: this.phone,
     });
 
     this.horror = new HorrorDirector({

@@ -243,7 +243,7 @@ check('holding while replies are on screen does not strand the call',
 /* ---- terminal: search, open a record, and read it ---- */
 await page.evaluate(() => window.__game.focusTerminal(true));
 await page.waitForTimeout(200);
-await page.keyboard.press('F2');
+await page.keyboard.press('3');                    // ACCOUNTS
 for (const ch of 'DALEY') await page.keyboard.press(ch);
 await page.keyboard.press('Enter');
 await page.waitForTimeout(200);
@@ -256,17 +256,43 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(150);
 check('opening a record marks it looked up', await page.evaluate(() => window.__game.database.wasLookedUp('WH-40122')));
 
-await page.keyboard.press('F4');
+await page.keyboard.press('4');                    // MAP
 await page.waitForTimeout(250);
 check('terminal renders the service area map', (await page.evaluate(() => window.__game.terminal.screen)) === 'MAP');
 
-await page.keyboard.press('F3');
+await page.keyboard.press('2');                    // TICKETS
 await page.keyboard.press('n');
 await page.waitForTimeout(150);
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(250);
-check('terminal can open a new trouble ticket', (await page.evaluate(() => window.__game.outages.list.length)) > 0);
+const ticketCount = await page.evaluate(() => window.__game.outages.list.length);
+check('terminal can open a new trouble ticket', ticketCount > 0);
+
+/* Dispatch is folded into the ticket list: a new ticket lands open with its
+   units underneath it, so sending one is arrows + RETURN on the same screen
+   rather than a second screen and a second search. */
+const dispatchFlow = await page.evaluate(() => ({
+  screen: window.__game.terminal.screen,
+  expanded: !!window.__game.terminal.ticket,
+  rows: window.__game.terminal.describe().rows.filter((r) => r.k === 'item').map((r) => r.id),
+}));
+check('a new ticket opens with its units already listed',
+  dispatchFlow.expanded && dispatchFlow.rows.some((id) => id.startsWith('crew:')),
+  JSON.stringify(dispatchFlow).slice(0, 160));
+
+const sentFrom = await page.evaluate(async () => {
+  const g = window.__game;
+  const rows = g.terminal.describe().rows.filter((r) => r.k === 'item');
+  const i = rows.findIndex((r) => r.id.startsWith('crew:'));
+  if (i < 0) return { ok: false };
+  g.terminal.cursor = i;
+  g.terminal.activate();
+  await new Promise((r) => setTimeout(r, 200));
+  const t = g.outages.list.find((x) => x.crew);
+  return { ok: !!t, crew: t ? t.crew : null };
+});
+check('a unit can be dispatched from the ticket list', sentFrom.ok, JSON.stringify(sentFrom));
 
 // The terminal has to be readable and usable, not a stretched bitmap.
 // Wait for the DOM view to catch up -- it renders on the frame loop, and
@@ -286,7 +312,7 @@ const termUi = await page.evaluate(() => {
 });
 check('terminal text is legible', termUi.fontPx >= 18, `${termUi.fontPx}px`);
 check('terminal is an opaque takeover', !/, *0?\.\d+\)/.test(termUi.opaque), termUi.opaque);
-check('terminal rows are clickable', termUi.rows > 0 && termUi.tabs === 6, JSON.stringify(termUi));
+check('terminal rows are clickable', termUi.rows > 0 && termUi.tabs === 5, JSON.stringify(termUi));
 await page.evaluate(() => window.__game.focusTerminal(false));
 
 /* ---- where is the first call before we hand over to the pump? ---- */

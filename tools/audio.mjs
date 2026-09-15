@@ -11,6 +11,12 @@
    rain loop was steady filtered white noise, which is the
    definition of static, and it was the loudest thing in the mix.
 
+   The ENVELOPE side of this -- whether the rain is made of
+   impacts or is just a bed -- is measured properly in
+   tools/render.mjs, which renders offline and can therefore see
+   individual droplets. This harness runs at the frame rate of a
+   software renderer and cannot.
+
    What to look for:
      * rain    should be BASS-HEAVY. If `high` is anywhere near
                `low`, it is hiss, not weather.

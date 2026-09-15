@@ -36,6 +36,9 @@ const NAV_DELAY = 400;      // ms before a held direction repeats
 const NAV_REPEAT = 140;     // ms between repeats after that
 const DEAD = 0.18;          // stick deadzone
 const TRIGGER = 0.35;       // analog trigger press point
+/* Chrome refuses a pointer-lock request for roughly a second after an exit.
+   Asking again a little slower than that gets the camera back on its own. */
+const LOCK_RETRY = 0.7;     // seconds between automatic re-lock attempts
 
 export class Input {
   constructor(canvas) {
@@ -48,6 +51,8 @@ export class Input {
     this.wantsLock = false;
     /** True when we want the pointer but do not have it. The HUD says so. */
     this.lockBlocked = false;
+    /** Seconds until the next automatic re-lock attempt. See _retryLock. */
+    this._lockRetry = 0;
     this.listeners = { key: [], click: [] };
 
     /** 'kbm' until a pad is actually used, then 'xbox' or 'playstation'. */
@@ -103,12 +108,17 @@ export class Input {
       this.mouse.dy += e.movementY || 0;
     });
 
-    this.canvas.addEventListener('mousedown', (e) => {
-      // A click is a user gesture, which is exactly what a denied lock was
-      // waiting for.
+    /* A click is a user gesture, which is exactly what a denied lock is
+       waiting for -- and it must count wherever it lands. Listening only on
+       the canvas meant that while a call panel was on screen, every click hit
+       the panel and the camera never came back. Capture phase, on the
+       document, so no UI layer can swallow the one gesture we need. */
+    document.addEventListener('mousedown', (e) => {
       if (this.wantsLock && !this.locked) this.requestLock();
-      for (const fn of this.listeners.click) fn({ type: 'down', button: e.button });
-    });
+      if (e.target === this.canvas) {
+        for (const fn of this.listeners.click) fn({ type: 'down', button: e.button });
+      }
+    }, true);
 
     addEventListener('gamepadconnected', (e) => {
       this.padConnected = true;
@@ -130,8 +140,29 @@ export class Input {
   setMode(mode) {
     this.mode = mode;
     this.wantsLock = mode === MODE.WORLD;
-    if (this.wantsLock) this.requestLock();
-    else { this.lockBlocked = false; this.releaseLock(); }
+    if (this.wantsLock) { this._lockRetry = 0; this.requestLock(); }
+    else { this.lockBlocked = false; this._lockRetry = 0; this.releaseLock(); }
+  }
+
+  /**
+   * Getting the pointer back after the terminal closes.
+   *
+   * The browser refuses a lock request for about a second after an exit, and
+   * that first refusal used to be the end of it: the camera stayed dead until
+   * the player thought to click. Since the exit was ours (page-initiated, not
+   * the player pressing Esc), the browser will hand the lock straight back
+   * once the cooldown passes -- so keep asking, quietly, instead of waiting to
+   * be rescued by a click.
+   */
+  _retryLock(dt) {
+    if (!this.wantsLock || this.locked || document.pointerLockElement) {
+      this._lockRetry = 0;
+      return;
+    }
+    this._lockRetry -= dt;
+    if (this._lockRetry > 0) return;
+    this._lockRetry = LOCK_RETRY;
+    this.requestLock();
   }
 
   requestLock() {
@@ -199,6 +230,7 @@ export class Input {
      press is indistinguishable from the keyboard downstream.
      ============================================================ */
   poll(dt) {
+    this._retryLock(dt);
     this.padMove.x = 0; this.padMove.y = 0;
     this.padLook.x = 0; this.padLook.y = 0;
 

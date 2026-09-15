@@ -71,14 +71,14 @@ await page.waitForTimeout(900);
 await page.evaluate(() => { window.__game.player._seatBlend = 1; });
 check('T opens the terminal from standing', await page.evaluate(() => window.__game.terminalFocused));
 
-for (const [key, want] of [['2', 'ACCT'], ['3', 'OUTG'], ['4', 'MAP'], ['5', 'DISP'], ['6', 'LOG'], ['1', 'MENU']]) {
+for (const [key, want] of [['2', 'OUTG'], ['3', 'ACCT'], ['4', 'MAP'], ['5', 'LOG'], ['1', 'CALL']]) {
   await page.keyboard.press(key);
   await page.waitForTimeout(120);
   const got = await page.evaluate(() => window.__game.terminal.screen);
   check(`number key ${key} selects ${want}`, got === want, got);
 }
 // the function keys still work for anyone who has them
-await page.keyboard.press('F2');
+await page.keyboard.press('F3');
 await page.waitForTimeout(120);
 check('F-keys still work as aliases', (await page.evaluate(() => window.__game.terminal.screen)) === 'ACCT');
 await page.keyboard.press('1');
@@ -127,7 +127,7 @@ await page.evaluate(() => {
   for (const l of g.phone.lines) { l.state = 'IDLE'; l.call = null; l.ringsLeft = 0; }
   g.phone.activeLine = null;
   if (!g.terminalFocused) g.focusTerminal(true);
-  g.terminal.go('DISP');
+  g.terminal.go('OUTG');
   g.callUI.showChoices([{ text: 'one' }, { text: 'two' }, { text: 'three' }]);
 });
 await page.waitForTimeout(150);
@@ -174,6 +174,25 @@ check('no tutorial instruction names a function key',
   hints.kbm.every((h) => !/\bF[1-9]\b/.test(h)), hints.kbm.find((h) => /\bF[1-9]\b/.test(h)) || '');
 check('every instruction token resolves',
   hints.kbm.every((h) => !h.includes('{')), hints.kbm.find((h) => h.includes('{')) || '');
+/* The labels name screen NUMBERS, and the screens have been renumbered once
+   already. A hint that says "press 2" when accounts moved to 3 is worse than
+   no hint, so this ties the two tables together. */
+const numbering = await page.evaluate(async () => {
+  const m = await import('/src/engine/controls.js');
+  const t = await import('/src/ui/terminal.js');
+  const keyFor = (screen) => (t.TABS.find((x) => x.screen === screen) || {}).key;
+  return {
+    accounts: { said: m.label('screenAccounts', 'kbm'), is: keyFor(t.SCREENS.ACCOUNT) },
+    tickets: { said: m.label('screenTickets', 'kbm'), is: keyFor(t.SCREENS.OUTAGE) },
+    range: { said: m.label('screens', 'kbm'), count: t.TABS.length },
+  };
+});
+check('the written screen numbers match the actual tabs',
+  numbering.accounts.said.includes(numbering.accounts.is)
+  && numbering.tickets.said.includes(numbering.tickets.is)
+  && numbering.range.said.includes(String(numbering.range.count)),
+  JSON.stringify(numbering));
+
 check('instructions re-word themselves for a pad',
   hints.pad.some((h, i) => h !== hints.kbm[i]) && hints.pad.every((h) => !h.includes('{')),
   hints.pad.find((h, i) => h !== hints.kbm[i]) || '');
@@ -185,6 +204,8 @@ await padPress('PadSelect');
 await page.waitForTimeout(400);
 check('the view button opens the terminal', await page.evaluate(() => window.__game.terminalFocused));
 
+await padPress('PadLB');
+await page.waitForTimeout(150);
 const before = await page.evaluate(() => window.__game.terminal.screen);
 await padPress('PadRB');
 await page.waitForTimeout(200);
@@ -199,7 +220,7 @@ const midway = await page.evaluate(() => ({
   screen: window.__game.terminal.screen, inTerminal: window.__game.terminalFocused,
 }));
 check('circle backs out one screen at a time',
-  midway.inTerminal && midway.screen === 'MENU', JSON.stringify(midway));
+  midway.inTerminal && midway.screen === 'CALL', JSON.stringify(midway));
 await padPress('PadB');
 await page.waitForTimeout(400);
 check('circle steps back out of the terminal',
@@ -223,13 +244,32 @@ await page.waitForTimeout(1200);
 const loose = await page.evaluate(() => ({
   state: window.__game.state,
   menu: window.__game.menu.open,
-  needs: window.__game.input.needsClickToLook,
-  hintShown: !document.getElementById('lockhint').classList.contains('hidden'),
+  locked: window.__game.input.locked,
 }));
 check('losing the pointer lock does not pause the game',
   loose.state === 'playing' && loose.menu !== 'panel', JSON.stringify(loose));
-check('the HUD says how to get the mouse back instead',
-  loose.needs && loose.hintShown, JSON.stringify(loose));
+/* And it comes BACK on its own. The browser refuses a re-lock for about a
+   second after an exit; the first version treated that one refusal as final,
+   so stepping out of the terminal left the camera dead until the player
+   happened to click. */
+check('the camera comes back without a click', loose.locked, JSON.stringify(loose));
+
+/* The structural half of the same bug: the call panel is a full-screen layer,
+   and while it took pointer events every click in the game landed on it
+   instead of the canvas -- so the one gesture that could restore the lock
+   never arrived. */
+const clickThrough = await page.evaluate(() => {
+  const g = window.__game;
+  g.callUI.open({ caller: { name: 'TEST', number: '555-0000' } });
+  g.callUI.showLine({ text: 'testing', call: { caller: {} } });
+  const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+  const onCall = !!(el && el.closest && el.closest('#call'));
+  const hit = el ? (el.id || el.tagName.toLowerCase()) : 'none';
+  g.callUI.close();
+  return { hit, onCall };
+});
+check('a live call does not swallow clicks meant for the room',
+  !clickThrough.onCall, JSON.stringify(clickThrough));
 
 await page.evaluate(() => clearInterval(window.__watch));
 check('no runtime errors', errors.length === 0, errors.slice(0, 3).join(' | '));

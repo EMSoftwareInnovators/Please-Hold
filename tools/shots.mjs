@@ -96,13 +96,14 @@ await page.evaluate(() => {
   g.outages.create({ feeder: 'MH-12', address: 'BETHEL PIKE', town: 'NEW BETHEL', cause: 'WIRE DOWN', hazard: true, customers: 210, priority: 1, stamp: g.clock.stamp() });
   g.outages.create({ feeder: 'KC-04', address: '3 CREEK ST', town: 'KETTLE CREEK', cause: 'FUSE', customers: 46, stamp: g.clock.stamp() });
   g.terminal.go('OUTG');
+  g.terminal.ticket = null;
 });
 await settle(600);
 await shot('10-terminal-tickets');
 
 await page.evaluate(() => {
   const g = window.__game;
-  g.terminal.go('DISP', true);
+  g.terminal.go('OUTG', true);
   g.terminal.ticket = g.outages.open[0];
   g.terminal.dirty = true;
 });
@@ -177,6 +178,21 @@ await page.evaluate(() => {
 });
 await settle(900);
 await shot('13-call-choices');
+
+/* The screen that replaced the main menu: who is on the line, and their
+   account, without the player typing anything. */
+await page.evaluate(() => {
+  const g = window.__game;
+  g.focusTerminal(true);
+  g.terminal.go('CALL');
+  const rec = g.terminal._callerRecord();
+  if (rec) g.terminal.openRecord(rec.id, { stay: true });
+  g.terminal.dirty = true;
+});
+await settle(900);
+await shot('13b-terminal-caller');
+await page.evaluate(() => window.__game.focusTerminal(false));
+await settle(400);
 
 // on hold
 await page.evaluate(() => window.__game.phone.hold());

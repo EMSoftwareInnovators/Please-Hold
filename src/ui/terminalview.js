@@ -152,7 +152,7 @@ export class TerminalView {
       case 'note': return `<div class="t-note">${escapeHtml(r.t)}</div>`;
       case 'warn': return `<div class="t-warn">${escapeHtml(r.t || `${r.label}: ${r.value}`)}</div>`;
       case 'bright': return `<div class="t-line t-bright">${cols(r.cols || [r.t], r.cw)}</div>`;
-      case 'cols': return `<div class="t-cols">${cols(r.cols, r.cw)}</div>`;
+      case 'cols': return `<div class="t-cols${r.nest ? ' nest' : ''}">${cols(r.cols, r.cw)}</div>`;
       case 'field':
         return `<div class="t-field"><span class="l">${escapeHtml(r.label)}</span>`
           + `<span class="v">${escapeHtml(r.value)}<i class="caret">_</i></span></div>`;
@@ -167,6 +167,7 @@ export class TerminalView {
         if (r.off) cls.push('off');
         if (r.good) cls.push('good');
         if (r.tone) cls.push(`tone-${r.tone}`);
+        if (r.nest) cls.push('nest');
         return `<div class="${cls.join(' ')}" data-id="${escapeHtml(r.id)}">`
           + `<span class="mark">></span>${cols(r.cols, r.cw)}`
           + (r.sub ? `<span class="sub">${escapeHtml(r.sub)}</span>` : '')

@@ -144,13 +144,47 @@ While the terminal is focused the player is locked: no look, no movement. The
 HUD is hidden, so anything urgent — a ringing line — must be surfaced in the
 terminal's own status bar, or it is invisible.
 
-**The screens are on the number row, 1–6.** They were on F1–F6, which most
+**The screens are on the number row, 1–5.** They were on F1–F6, which most
 laptops put behind an `Fn` chord — the terminal was effectively unusable
 without a desktop keyboard. F1–F6 stay as aliases, and the account search
 therefore does **not** accept digits. The perf overlay also lives on F3; it is
 suppressed while the terminal is up for exactly that reason.
 
-### 3a. A call docks under the terminal. It does not get hidden behind it.
+### 3a. The terminal is a tool, not a job
+
+Every screen has to pay for the keypresses it costs. The first version had six
+screens and made the player earn each call: open the terminal, switch to
+accounts, type the caller's name a letter at a time, RETURN, RETURN, switch to
+tickets, N, pick a cause, RETURN, switch to units, pick one, RETURN. Fifteen
+inputs of clerical work, identical every call, fourteen times a night. It was
+accurate to the job and it flattened the horror: by the third strange call the
+player is doing data entry, and data entry is not frightening.
+
+What it costs now: the number arrives with the call and the account arrives
+with the number, so **RETURN, N, a cause, RETURN, RETURN** is a whole call —
+seven presses, no typing.
+
+Three rules came out of that:
+
+1. **The terminal does the clerical work. The player makes the decisions.**
+   Looking up an account the terminal already knows is not a decision. Which
+   unit to send, whether to believe the address, whether to promise a time —
+   those are decisions. Automate the first kind; never automate the second.
+2. **A screen whose job is to list the other screens is not a screen.** The
+   old MENU duplicated the tab strip sitting directly above it. Screen 1 is
+   now the caller.
+3. **Where an action ends is where the next one starts.** Writing a ticket
+   leaves you on that ticket with its units open and the recommended one under
+   the cursor. Nothing should ever make the player go and find the thing they
+   just created.
+
+The one thing deliberately NOT automated: pulling the record is still a
+keypress. Several conversations gate on the player having read the account
+(`requires.lookedUp`), and the anomalies live in the detail — the meter that
+reads wrong, the service date in the wrong decade. A record the player never
+opened is a record they never read.
+
+### 3b. A call docks under the terminal. It does not get hidden behind it.
 
 The terminal used to take the whole screen, including the conversation the
 tutorial was waiting on: the player was told to do something by a voice they
@@ -174,7 +208,7 @@ Inside the account search, letters are letters: `F`, `H` and `X` type instead
 of working the phone, because a name with an F in it has to be typeable. Pad
 buttons are unambiguous and always work.
 
-## 3b. Every binding lives in `engine/controls.js`
+### 3c. Every binding lives in `engine/controls.js`
 
 One table, `ACTIONS`. Each entry lists the keys it answers to, where it sits
 under the standard gamepad mapping, and what to print for it on a keyboard, an
@@ -194,6 +228,14 @@ Xbox pad and a PlayStation pad.
   player asking for their cursor back, and closing the menu requested it again.
   The HUD says `CLICK TO LOOK AROUND` instead. `tools/controls.mjs` asserts the
   loop stays dead.
+* **And the lock comes back by itself.** Treating that first refusal as final
+  left the camera dead after every trip to the terminal. The exit is ours, so
+  the browser will hand the lock back once its cooldown passes: `_retryLock`
+  keeps asking every 0.7s instead of waiting for a click.
+* **No full-screen layer may take pointer events.** `#call` did, and while a
+  call was on screen every click in the game landed on the call panel instead
+  of the canvas — so the one gesture that could have restored the lock never
+  arrived. Layers are `pointer-events: none`; the panels inside them opt in.
 * **Auto-repeat does not reach the game.** Only `REPEATABLE` keys (text
   editing, arrows) are forwarded while held; a held `Esc` used to toggle the
   pause menu dozens of times a second.
@@ -324,7 +366,8 @@ and all of them have caught real bugs:
 | `node tools/playthrough.mjs` | drives a whole shift with real key events and asserts 29 things about the result |
 | `node tools/audio.mjs` | taps the audio buses and measures RMS, spectral balance and voice-chain leaks |
 | `node tools/tutorial.mjs` | plays the handover call and asserts every `waitFor` gate opens on the right action, that the call stays readable inside the terminal, and that every instruction reaches the screen with real key names |
-| `node tools/controls.mjs` | key routing: the number row, the arrow-key handover between a docked call and the terminal, pad buttons through the same path `input.js` uses, and the pause-menu loop |
+| `node tools/controls.mjs` | key routing: the number row, the arrow-key handover between a docked call and the terminal, pad buttons through the same path `input.js` uses, the pause-menu loop, and that the camera comes back on its own |
+| `node tools/render.mjs` | renders the audio offline to real WAVs and measures the envelope. The only harness that can tell rain from static |
 | `node tools/perf.mjs` | lights, draw calls and render target at each quality preset |
 | `npm run check` | all of the above except perf and shots |
 | `npm run shots` | captures the game at 20 moments, so visual regressions are visible |
@@ -365,6 +408,39 @@ Everything is synthesized. Two rules learned the hard way:
 
 A 7.8kHz tone sits right where the ear is most sensitive. Do not put one in the
 room tone. Anything in that range belongs behind `Options > ROOM TONE`.
+
+### Two things that were wrong twice, and why
+
+**"It sounds like static."** Both times the cause was the same: a bed of
+**white** noise at a fixed gain. White noise has equal energy per hertz, so a
+lowpass only tilts it — there is always hiss left on top — and a level that
+never moves has no weather in it. Rain is brown noise for the wash, a pink
+sheet whose level wanders on a random walk (not an LFO: an LFO is periodic and
+reads as an effect), and thirty to seventy discrete impacts a second in three
+sizes. **The droplets are the sound.** A rain recording with its transients
+removed is static.
+
+**"It sounds like beeps."** The first voice synthesizer cycled six vowel
+colours in step with a syllable count: right rhythm, no texture. What was
+missing was not filter quality, it was **consonants and transitions**. Speech
+is mostly the movement between targets — formants that slide, turbulence, and
+the silences in the middle of words that are stops. `engine/phonemes.js` maps
+spelling onto a rough phoneme string and `speak()` plays it through three
+sliding formants, a noise channel and a glottal source with jitter and
+vibrato. Nothing is meant to be intelligible: every line arrives through a
+300–3400Hz band, and the target is a voice you can hear the shape of and not
+quite make out.
+
+### Measure it offline, then listen
+
+`tools/render.mjs` runs the engine in an `OfflineAudioContext`, writes WAVs to
+`./audio`, and measures the **envelope** — level variation, crest factor,
+onsets per second — because a spectrum genuinely cannot tell rain from static.
+Assertions compare rain against the radio's inter-station hiss, which is real
+static and is supposed to be.
+
+**Then listen to the files.** Every audio bug in this project so far passed
+whatever numeric check was in place at the time.
 
 ## 11. Assets
 

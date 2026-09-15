@@ -36,11 +36,10 @@ const GREEN = '#5ce08a';
 const BG = '#120b04';
 
 export const SCREENS = {
-  MENU: 'MENU',
-  ACCOUNT: 'ACCT',
+  CALL: 'CALL',
   OUTAGE: 'OUTG',
+  ACCOUNT: 'ACCT',
   MAP: 'MAP',
-  DISPATCH: 'DISP',
   LOG: 'LOG',
 };
 
@@ -49,12 +48,11 @@ export const SCREENS = {
    keyboard. F1-F6 still work for anyone who has them, and a pad gets the
    shoulder buttons. */
 export const TABS = [
-  { key: '1', screen: SCREENS.MENU, label: 'MENU' },
-  { key: '2', screen: SCREENS.ACCOUNT, label: 'ACCOUNTS' },
-  { key: '3', screen: SCREENS.OUTAGE, label: 'TICKETS' },
+  { key: '1', screen: SCREENS.CALL, label: 'CALL' },
+  { key: '2', screen: SCREENS.OUTAGE, label: 'TICKETS' },
+  { key: '3', screen: SCREENS.ACCOUNT, label: 'ACCOUNTS' },
   { key: '4', screen: SCREENS.MAP, label: 'MAP' },
-  { key: '5', screen: SCREENS.DISPATCH, label: 'UNITS' },
-  { key: '6', screen: SCREENS.LOG, label: 'LOG' },
+  { key: '5', screen: SCREENS.LOG, label: 'LOG' },
 ];
 
 const CAUSES = ['UNKNOWN', 'FUSE', 'TREE ON LINE', 'SERVICE DROP', 'WIRE DOWN', 'BROKEN POLE', 'TRANSFORMER'];
@@ -77,10 +75,13 @@ const row = (k, extra = {}) => ({ k, ...extra });
    one entry so they can never drift apart -- the first version styled them
    separately and the headings collapsed into "UNITLEADETANOTE". */
 const COLS = {
-  account: ['13cqw', '24cqw', '1 1 24cqw', '9cqw'],
-  ticket: ['11cqw', '8cqw', '1 1 20cqw', '15cqw', '6cqw', '12cqw'],
-  crew: ['8cqw', '15cqw', '8cqw', '1 1 24cqw'],
-  roster: ['8cqw', '15cqw', '20cqw', '1 1 12cqw'],
+  account: ['12cqw', '22cqw', '1 1 22cqw', '8cqw'],
+  /* These have to fit the body's width (about 78cqw once the selection mark
+     and the row padding are taken off) or the last column wraps onto its own
+     line and the table stops reading as a table. */
+  ticket: ['10cqw', '7cqw', '1 1 17cqw', '14cqw', '5cqw', '11cqw'],
+  crew: ['7cqw', '13cqw', '7cqw', '1 1 22cqw'],
+  roster: ['7cqw', '13cqw', '18cqw', '1 1 12cqw'],
   menu: ['7cqw', '1 1 30cqw'],
   cause: ['1 1 30cqw'],
   log: ['9cqw', '1 1 40cqw'],
@@ -94,7 +95,7 @@ export class Terminal {
     this.canvas.height = TUBE_H;
     this.ctx = this.canvas.getContext('2d');
 
-    this.screen = SCREENS.MENU;
+    this.screen = SCREENS.CALL;
     this.powered = true;
     this.dirty = true;
     this.focused = false;
@@ -157,46 +158,125 @@ export class Terminal {
   describe() {
     if (!this.powered) return { title: '', rows: [], keys: [], dead: true };
     switch (this.screen) {
-      case SCREENS.MENU: return this._menu();
+      case SCREENS.CALL: return this._callScreen();
       case SCREENS.ACCOUNT: return this.record ? this._record() : this._accounts();
       case SCREENS.OUTAGE: return this.draft ? this._draft() : this._tickets();
       case SCREENS.MAP: return this._map();
-      case SCREENS.DISPATCH: return this._dispatch();
       case SCREENS.LOG: return this._log();
       default: return { title: '', rows: [], keys: [] };
     }
   }
 
-  _menu() {
+  /**
+   * The screen the player is on for most of the night.
+   *
+   * The old first screen was a MENU: a list of the other screens, which the
+   * tab strip above it was already showing. It cost a keypress and taught
+   * nothing. This replaces it with the thing the player actually wants the
+   * moment a call connects -- who is on the line, and which account that is.
+   *
+   * The lookup is the terminal's job, not the player's. Typing a name into a
+   * search box on every single call was the clerical tax that made the whole
+   * desk feel like data entry. What the player still has to do is READ the
+   * record (RETURN), because several conversations gate on having read it,
+   * and because the anomalies live in the detail rather than in the name.
+   */
+  _callScreen() {
+    const phone = this.sys.phone;
+    const line = phone && phone.active;
+    const call = line && line.call;
+
+    if (!call) {
+      const rows = [
+        row('head', { t: 'DISTRICT OPERATIONS — MARROW HILL' }),
+        row('rule'),
+        row('gap'),
+        row('dim', { t: 'NO CALL ON THE LINE.' }),
+        row('gap'),
+        row('kv', { label: 'TICKETS OPEN', value: String(this.sys.outages.open.length) }),
+        row('kv', { label: 'METERS OUT', value: String(this.sys.outages.customersOut()) }),
+        row('kv', { label: 'CREWS OUT', value: String(this.sys.crews.dispatchedCount()) }),
+        row('kv', { label: 'HELD', value: String(phone ? phone.held.length : 0) }),
+      ];
+      const log = this.sys.state.shiftLog.slice(-3);
+      if (log.length) {
+        rows.push(row('gap'), row('rule'), row('head', { t: 'LAST LOGGED' }));
+        for (const e of log) rows.push(row('dim', { cw: COLS.log, cols: [e.stamp || '----', e.text] }));
+      }
+      return { title: 'DISPATCH CONSOLE', rows, keys: [['screens', 'jump to a screen']] };
+    }
+
+    const c = call.caller || {};
     const rows = [
-      row('head', { t: 'DISTRICT OPERATIONS — MARROW HILL' }),
-      row('rule'),
+      row('kv', { label: 'LINE', value: String((phone.activeLine ?? 0) + 1) }),
+      row('kv', { label: 'CALLING', value: c.display || c.name || 'UNKNOWN' }),
+      row('kv', { label: 'NUMBER', value: c.number || 'UNAVAILABLE' }),
       row('gap'),
+      row('rule'),
     ];
-    TABS.slice(1).forEach((tab, i) => {
-      rows.push(row('item', {
-        id: `menu:${tab.screen}`,
-        sel: this.cursor === i,
-        cw: COLS.menu,
-        cols: [`[${tab.key}]`, tab.label],
-        sub: {
-          ACCOUNTS: 'search by account, name, telephone or address',
-          TICKETS: 'open, review and create outage reports',
-          MAP: 'distribution map with current trouble',
-          UNITS: 'dispatch field crews',
-          LOG: 'this terminal, this shift',
-        }[tab.label],
+
+    const match = this._callerRecord();
+    if (!match) {
+      const internal = /^x/i.test(String(c.number || ''));
+      rows.push(row('gap'));
+      rows.push(row(internal ? 'dim' : 'warn', {
+        t: internal ? 'INTERNAL EXTENSION — NO SUBSCRIBER RECORD.' : 'NO ACCOUNT ON FILE FOR THIS NUMBER.',
       }));
-    });
-    rows.push(row('gap'), row('rule'));
-    rows.push(row('kv', { label: 'TICKETS OPEN', value: String(this.sys.outages.open.length) }));
-    rows.push(row('kv', { label: 'METERS OUT', value: String(this.sys.outages.customersOut()) }));
-    rows.push(row('kv', { label: 'CREWS OUT', value: String(this.sys.crews.dispatchedCount()) }));
+      rows.push(row('note', { t: 'try ACCOUNTS and search by name or street' }));
+      return {
+        title: 'CALL IN PROGRESS',
+        rows,
+        keys: [['newTicket', 'open a ticket anyway'], ['screens', 'other screens']],
+      };
+    }
+
+    const read = this.sys.database.wasLookedUp(match.id);
+    rows.push(row('cols', { cw: COLS.account, cols: ['ACCOUNT', 'NAME', 'SERVICE ADDRESS', 'CKT'] }));
+    rows.push(row('item', {
+      id: `caller:${match.id}`,
+      sel: this.cursor === 0,
+      cw: COLS.account,
+      warn: !!match.flagged,
+      cols: [match.id, match.name, match.address || '—', match.feeder],
+    }));
+
+    if (!read) {
+      rows.push(row('gap'));
+      rows.push(row('note', { t: 'RETURN to pull the record' }));
+    } else {
+      rows.push(row('gap'));
+      for (const [label, value, flag] of [
+        ['TOWN', match.town || '—'],
+        ['METER', match.meter || '—'],
+        ['SERVICE SINCE', match.since, match.flagged],
+        ['STATUS', match.status],
+      ]) rows.push(row('kv', { label, value, warn: !!flag }));
+      rows.push(row('rule'), row('head', { t: 'ACCOUNT NOTES' }));
+      const note = match.notes || '(none)';
+      rows.push(row(/MEDICAL|PRIORITY/.test(note) ? 'warn' : 'text', { t: note }));
+      if (match.duplicate) rows.push(row('warn', { t: '** DUPLICATE RECORD — SEE FILE **' }));
+    }
+
     return {
-      title: 'MAIN MENU',
+      title: 'CALL IN PROGRESS',
       rows,
-      keys: [['nav', 'select'], ['select', 'open'], ['screens', 'jump to a screen']],
+      keys: read
+        ? [['newTicket', 'open a ticket for this caller'], ['screens', 'other screens']]
+        : [['select', 'pull the record'], ['newTicket', 'open a ticket']],
     };
+  }
+
+  /** The account the caller's number belongs to, if any. */
+  _callerRecord() {
+    const line = this.sys.phone && this.sys.phone.active;
+    const call = line && line.call;
+    const num = call && call.caller && call.caller.number;
+    if (!num) return null;
+    if (/^x/i.test(String(num))) return null;    // an internal extension
+    const digits = String(num).replace(/\D/g, '');
+    if (digits.length < 4) return null;
+    const hit = this.sys.database.search(num, { limit: 1 });
+    return hit && hit.length ? hit[0] : null;
   }
 
   _accounts() {
@@ -258,6 +338,16 @@ export class Terminal {
     };
   }
 
+  /**
+   * Tickets, with the units folded in.
+   *
+   * Assigning a crew used to be a separate screen, which meant the player
+   * opened a ticket on one screen, remembered its number, switched, and found
+   * it again. Now a ticket opens IN PLACE: RETURN on it drops the unit list
+   * underneath it with the reason each unit is or is not suitable, and RETURN
+   * on a unit sends it. Two presses, and the ticket you are looking at is the
+   * ticket you are assigning.
+   */
   _tickets() {
     const list = this.sys.outages.open;
     const rows = [];
@@ -266,22 +356,73 @@ export class Terminal {
       rows.push(row('dim', { t: 'NO OPEN TICKETS.' }));
       rows.push(row('gap'));
       rows.push(row('note', { t: 'press N to open a new trouble ticket' }));
-    } else {
-      rows.push(row('cols', { cw: COLS.ticket, cols: ['TICKET', 'CKT', 'ADDRESS', 'CAUSE', 'MTRS', 'STATUS'] }));
-      list.slice(0, 14).forEach((t, i) => {
-        rows.push(row('item', {
-          id: `tkt:${t.id}`,
-          sel: this.cursor === i,
-          cw: COLS.ticket,
-          warn: t.hazard,
-          cols: [t.id, t.feeder, t.address || t.town || '—', t.cause, String(t.customers), t.status],
+      rows.push(row('gap'), row('rule'), row('head', { t: 'UNIT STATUS' }));
+      rows.push(row('cols', { cw: COLS.roster, cols: ['UNIT', 'LEAD', 'STATUS', 'ON'] }));
+      for (const c of this.sys.crews.crews) {
+        rows.push(row('text', {
+          cw: COLS.roster,
+          cols: [c.id, c.lead, c.status, c.ticket || '—'],
+          tone: c.status === CREW_STATUS.AVAILABLE ? 'good' : 'off',
         }));
-      });
+      }
+      return {
+        title: 'TROUBLE TICKET FILE',
+        rows,
+        keys: [['newTicket', 'new ticket'], ['screens', 'other screens']],
+      };
     }
+
+    rows.push(row('cols', { cw: COLS.ticket, cols: ['TICKET', 'CKT', 'ADDRESS', 'CAUSE', 'MTRS', 'STATUS'] }));
+    for (const t of list.slice(0, 14)) {
+      const open = this.ticket === t;
+      rows.push(row('item', {
+        id: `tkt:${t.id}`,
+        cw: COLS.ticket,
+        warn: t.hazard,
+        cols: [t.id, t.feeder, t.address || t.town || '—', t.cause, String(t.customers), t.status],
+      }));
+      if (!open) continue;
+
+      // --- the expanded ticket ---
+      if (t.hazard) rows.push(row('warn', { t: '** HAZARD — TREAT THE LINE AS ENERGIZED **' }));
+      if (t.crew) {
+        rows.push(row('kv', { label: 'ASSIGNED', value: `${t.crew} — ${t.status}` }));
+        rows.push(row('note', { t: 'RETURN on another unit to reassign' }));
+      }
+      rows.push(row('cols', { cw: COLS.crew, nest: true, cols: ['UNIT', 'LEAD', 'ETA', 'NOTE'] }));
+      for (const r of this.sys.dispatcher.recommend(t.id)) {
+        // The NOTE column is the answer to "can I send this unit", so it is
+        // the one that carries the colour: green only for a unit that is
+        // genuinely ready, never for one that has to be woken up first.
+        const tone = !r.free ? 'off' : !r.qualified ? 'bad' : r.note === 'READY' ? 'good' : 'caution';
+        rows.push(row('item', {
+          id: `crew:${r.crew.id}`,
+          nest: true,
+          cw: COLS.crew,
+          warn: r.free && !r.qualified,
+          off: !r.free,
+          tone,
+          cols: [r.crew.id, r.crew.lead, `${r.eta}m`, r.note],
+        }));
+      }
+      rows.push(row('gap'));
+    }
+
+    // Selection is over whatever rows ended up on screen, tickets and units
+    // together, so one pair of arrow keys drives the whole page.
+    const items = rows.filter((r) => r.k === 'item');
+    this.cursor = Math.max(0, Math.min(items.length - 1, this.cursor));
+    items.forEach((r, i) => { r.sel = i === this.cursor; });
+
+    const sel = items[this.cursor];
     return {
       title: 'TROUBLE TICKET FILE',
       rows,
-      keys: [['nav', 'select'], ['select', 'assign a unit'], ['newTicket', 'new ticket']],
+      keys: [
+        ['nav', 'select'],
+        ['select', sel && sel.id.startsWith('crew:') ? 'dispatch this unit' : 'open the ticket'],
+        ['newTicket', 'new ticket'],
+      ],
     };
   }
 
@@ -319,53 +460,6 @@ export class Terminal {
     rows.push(row('kv', { label: 'CIRCUITS OUT', value: String(affected.size) }));
     rows.push(row('kv', { label: 'METERS OUT', value: String(this.sys.outages.customersOut()) }));
     return { title: 'SERVICE AREA DISPLAY', rows, keys: [['screens', 'other screens']] };
-  }
-
-  _dispatch() {
-    const ticket = this.ticket || this.sys.outages.unassigned()[0] || null;
-    const rows = [];
-    if (!ticket) {
-      rows.push(row('gap'));
-      rows.push(row('dim', { t: 'NO UNASSIGNED TICKETS.' }));
-      rows.push(row('gap'), row('rule'), row('head', { t: 'UNIT STATUS' }));
-      rows.push(row('cols', { cols: ['UNIT', 'LEAD', 'STATUS', 'ON'] }));
-      for (const c of this.sys.crews.crews) {
-        rows.push(row('text', {
-          cols: [c.id, c.lead, c.status, c.ticket || '—'],
-          good: c.status === CREW_STATUS.AVAILABLE,
-        }));
-      }
-      return { title: 'UNIT ASSIGNMENT', rows, keys: [['screens', 'other screens']] };
-    }
-
-    rows.push(row('kv', { label: 'TICKET', value: `${ticket.id}   ${ticket.feeder}` }));
-    rows.push(row('kv', { label: 'LOCATION', value: `${ticket.address || '—'} ${ticket.town || ''}`.trim() }));
-    rows.push(row('kv', { label: 'CAUSE', value: ticket.cause, warn: ticket.hazard }));
-    if (ticket.hazard) rows.push(row('warn', { t: '** HAZARD — TREAT THE LINE AS ENERGIZED **' }));
-    rows.push(row('gap'), row('rule'));
-    rows.push(row('cols', { cw: COLS.crew, cols: ['UNIT', 'LEAD', 'ETA', 'NOTE'] }));
-
-    const recs = this.sys.dispatcher.recommend(ticket.id);
-    recs.forEach((r, i) => {
-      // The NOTE column is the answer to "can I send this unit", so it is the
-      // one that carries the color: green only for a unit that is genuinely
-      // ready, never for one that has to be woken up first.
-      const tone = !r.free ? 'off' : !r.qualified ? 'bad' : r.note === 'READY' ? 'good' : 'caution';
-      rows.push(row('item', {
-        id: `crew:${r.crew.id}`,
-        sel: this.cursor === i,
-        cw: COLS.crew,
-        warn: r.free && !r.qualified,
-        off: !r.free,
-        tone,
-        cols: [r.crew.id, r.crew.lead, `${r.eta}m`, r.note],
-      }));
-    });
-    return {
-      title: 'UNIT ASSIGNMENT',
-      rows,
-      keys: [['nav', 'select a unit'], ['select', 'dispatch'], [null, 'TAB for the next ticket']],
-    };
   }
 
   _log() {
@@ -406,10 +500,13 @@ export class Terminal {
     this.dirty = true;
     if (this.sys.audio) this.sys.audio.play('keyClack', { volume: 0.45 });
 
+    /* Back, one step at a time: an open record, a half-written ticket, an
+       expanded ticket, then the screen, then out of the terminal entirely. */
     if (k === 'Escape') {
       if (this.record) { this.record = null; return true; }
       if (this.draft) { this.draft = null; return true; }
-      if (this.screen !== SCREENS.MENU) { this.go(SCREENS.MENU); return true; }
+      if (this.screen === SCREENS.OUTAGE && this.ticket) { this.ticket = null; this.cursor = 0; return true; }
+      if (this.screen !== SCREENS.CALL) { this.go(SCREENS.CALL); return true; }
       return false;                      // game.js reads this as "step back"
     }
 
@@ -427,10 +524,16 @@ export class Terminal {
 
     if (k === 'Enter') { this.activate(); return true; }
 
+    const isN = k === 'n' || k === 'N';
     switch (this.screen) {
+      case SCREENS.CALL:
+        // N is the whole point of this screen: the caller is on the line and
+        // their account is already on the glass, so a ticket is one key.
+        if (isN) { this._startTicketFrom(this._callerRecord()); return true; }
+        return true;
       case SCREENS.ACCOUNT:
         if (this.record) {
-          if (k === 'n' || k === 'N') { this._startTicketFrom(this.record); return true; }
+          if (isN) { this._startTicketFrom(this.record); return true; }
           return true;
         }
         return this._typing(k);
@@ -439,9 +542,7 @@ export class Terminal {
           if (k === 'h' || k === 'H') { this.draft.hazard = !this.draft.hazard; return true; }
           return true;
         }
-        if (k === 'n' || k === 'N') { this.newTicket(); return true; }
-        return true;
-      case SCREENS.DISPATCH:
+        if (isN) { this._startTicketFrom(this._callerRecord()); return true; }
         if (k === 'Tab') { this.nextTicket(); return true; }
         return true;
       default:
@@ -468,9 +569,12 @@ export class Terminal {
     if (id && item) this.cursor = items.indexOf(item);
 
     switch (this.screen) {
-      case SCREENS.MENU: {
-        if (!item) return;
-        this.go(item.id.split(':')[1]);
+      case SCREENS.CALL: {
+        // Pulling the record is a deliberate act -- several conversations
+        // gate on the player having actually read the account -- but it is
+        // now one key instead of a screen change and a search.
+        const rec = this._callerRecord();
+        if (rec) this.openRecord(rec.id, { stay: true });
         return;
       }
       case SCREENS.ACCOUNT: {
@@ -491,13 +595,14 @@ export class Terminal {
           return;
         }
         if (!item) return;
-        this.ticket = this.sys.outages.byId.get(item.id.split(':')[1]) || null;
-        this.go(SCREENS.DISPATCH, true);
-        return;
-      }
-      case SCREENS.DISPATCH: {
-        if (!item) return;
-        this.dispatchTo(item.id.split(':')[1]);
+        const [kind, id] = item.id.split(':');
+        if (kind === 'crew') { this.dispatchTo(id); return; }
+        // Opening a ticket drops its units in underneath it; opening the one
+        // that is already open closes it again.
+        const t = this.sys.outages.byId.get(id) || null;
+        this.ticket = this.ticket === t ? null : t;
+        this.cursor = this._items().findIndex((r) => r.id === item.id);
+        if (this.cursor < 0) this.cursor = 0;
         return;
       }
       default:
@@ -515,10 +620,11 @@ export class Terminal {
   }
 
   /* ---------------- actions ---------------- */
-  openRecord(id) {
+  /** `stay` reads the record without leaving the screen the player is on. */
+  openRecord(id, { stay = false } = {}) {
     const r = this.sys.database.get(id);
     if (!r) return;
-    this.record = r;
+    if (!stay) this.record = r;
     this.sys.database.markLookedUp(r.id);
     this.sys.state.set('used_terminal_lookup', true);
     this.dirty = true;
@@ -534,7 +640,7 @@ export class Terminal {
   _startTicketFrom(record) {
     this.record = null;
     this.screen = SCREENS.OUTAGE;
-    this.newTicket(record);
+    this.newTicket(record || null);
     this.toast('SELECT A CAUSE, THEN RETURN');
   }
 
@@ -550,8 +656,18 @@ export class Terminal {
     this.sys.state.log(this.sys.clock.stamp(), `${t.id} opened: ${t.address || t.feeder} (${t.cause})`, 'ticket');
     this.sys.state.set('created_a_ticket', true);
     this.draft = null;
-    this.cursor = 0;
-    this.toast(`${t.id} OPENED`);
+    /* Land on the new ticket with its unit list already open AND the best
+       unit under the cursor. Writing a ticket and then hunting for it again
+       was half the clerical work; so was scrolling to the unit the terminal
+       had already worked out. The player still has to press the key, and can
+       still send somebody else -- the recommendation is a default, not a
+       decision. */
+    this.screen = SCREENS.OUTAGE;
+    this.ticket = t;
+    const items = this._items();
+    const firstCrew = items.findIndex((r) => r.id.startsWith('crew:'));
+    this.cursor = firstCrew >= 0 ? firstCrew : 0;
+    this.toast(`${t.id} OPENED — SELECT A UNIT`);
   }
 
   dispatchTo(crewId) {
@@ -562,6 +678,7 @@ export class Terminal {
     const res = this.sys.dispatcher.send(crewId, ticket.id);
     this.toast(res.ok ? `${crewId} DISPATCHED — ETA ${res.eta} MIN` : res.reason);
     if (res.ok) { this.ticket = null; this.cursor = 0; }
+    return res;
   }
 
   nextTicket() {

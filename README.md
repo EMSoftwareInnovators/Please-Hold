@@ -90,14 +90,22 @@ Press **F3** in game for live frame time, draw calls and light count.
 ### Tests
 
 ```bash
-npm run check           # validator, boot, audio, soak, tutorial, controls, playthrough
+npm run check           # every harness below except perf and shots
 node tools/calls.mjs    # validate every call script (no browser needed)
-node tools/audio.mjs    # measure the audio buses -- levels, balance, leaks
+npm run check:render    # render the audio to ./audio/*.wav and measure it
+npm run check:audio     # live bus levels, balance and voice-chain leaks
 npm run check:tutorial  # play the handover call gate by gate
 npm run check:controls  # key routing, pointer lock, the pause-menu loop
 node tools/perf.mjs     # lights, draw calls and render target per preset
 npm run shots           # capture screenshots to ./shots
 ```
+
+`check:render` is the one worth knowing about: it runs the whole audio engine
+in an `OfflineAudioContext`, writes real WAVs to `./audio`, and measures them.
+**Listen to those files.** A spectrum cannot tell rain from static — both can
+be shaped identically — so what it actually checks is the envelope: how much
+the level wanders, how far peaks stand above the bed, and how many discrete
+impacts there are per second.
 
 ---
 
@@ -143,13 +151,31 @@ Some will not, and they will remember.
 | Keyboard | Pad | |
 |---|---|---|
 | `T` | `View` / `Share` | sit down at the terminal / step back from it |
-| `1` – `6` | `LB` / `RB` (`L1` / `R1`) | menu, accounts, tickets, map, units, log |
+| `1` – `5` | `LB` / `RB` (`L1` / `R1`) | call, tickets, accounts, map, log |
 | arrows | d-pad | move the selection |
-| `Return` | `A` / `✕` | search, open a record, assign a unit |
-| `N` | — | open a new trouble ticket |
+| `Return` | `A` / `✕` | pull a record, open a ticket, send a unit |
+| `N` | — | open a trouble ticket for whoever is on the line |
 | `H` | — | (on a new ticket) mark it a hazard |
 | `Esc` | `B` / `○` | back one step |
 | mouse | — | click the tabs, click any row |
+
+Five screens, and the two you live on are `1` and `2`.
+
+**`1` CALL** is the terminal's answer to the question you always have: who is
+this. The number comes up with the call and the account comes up with the
+number — you never type a name to serve the person on the line. `Return` pulls
+the record (the notes, the meter, the medical alerts), `N` opens a ticket
+already filled in from it.
+
+**`2` TICKETS** carries dispatch inside it. `Return` on a ticket drops the
+units underneath it with an ETA and a reason each one is or is not suitable;
+`Return` on a unit sends it. A ticket you have just written lands open with
+the recommended unit already under the cursor — which is a default, not a
+decision: the unit that is closest is regularly the unit that is not rated for
+the work, and the game will let you send them.
+
+**`3` ACCOUNTS** is the search, for when you need somebody who is not on the
+line: the neighbour, the address that does not match what you are being told.
 
 The screens are on the number row, not `F1` – `F6`: most laptops put the
 function row behind an `Fn` chord, which made the terminal unusable without a
@@ -200,7 +226,8 @@ not read.
 | Story scheduler | beat calls, time calls, a weighted random pool, and a rhythm rule that keeps ordinary work between the strange calls |
 | Horror | 13 named events from "the storm could be doing this" to events with no innocent reading |
 | Environment | procedural office, storm exterior, rain volume, rain-on-glass shader, lightning, fluorescent ballast simulation |
-| Audio | full synthesis: rain with gusts and droplet transients, thunder, ballast hum, CRT flyback, ring, dial tone, DTMF, squelch, hold music, and **five telephone line treatments** |
+| Audio | full synthesis, no files: rain built from brown noise, a wandering sheet and ~30-70 discrete impacts a second; thunder, ballast hum, CRT flyback, ring, dial tone, DTMF, squelch, hold music, and **five telephone line treatments** |
+| Voices | a source-filter synthesizer driven by the words themselves: spelling to phonemes, three formants that **slide** between targets, turbulence for the fricatives, real closures and bursts for the stops, and a phrase contour with stress and question rises |
 | Rendering budget | baked static lighting, a pooled light rig, static geometry merging, three quality presets and an adaptive resolution scaler |
 | Game clock | shift time, and events that can lie about it |
 | Save | checkpoint at every story beat |
@@ -232,14 +259,14 @@ not read.
 |---|---|
 | ![the office](docs/shots/03-office.png) | ![a call](docs/shots/13-call-choices.png) |
 | the dispatch room at 22:45 | a caller, and four ways to answer |
-| ![an account](docs/shots/08-terminal-record.png) | ![units](docs/shots/11-terminal-dispatch.png) |
-| the terminal: an account, with a medical alert | the terminal: who you can send, and who you cannot |
-| ![the map](docs/shots/12-terminal-map-outages.png) | ![the handover](docs/shots/12b-tutorial.png) |
-| the terminal: circuits with trouble | the handover call, waiting for you to do the thing |
-| ![a call in the terminal](docs/shots/12c-terminal-on-call.png) | ![1956](docs/shots/15-1956-call.png) |
-| a live call docked under the terminal, with the instruction it is waiting on | a caller whose line does not sound like 1999 |
-| ![the desk](docs/shots/05-seated.png) | ![please hold](docs/shots/20-please-hold.png) |
-| sat down, where most of the night happens | the end of the slice |
+| ![the call screen](docs/shots/13b-terminal-caller.png) | ![units](docs/shots/11-terminal-dispatch.png) |
+| the terminal: who is on the line, and their account, without typing a thing | the terminal: a ticket, with the units folded in underneath it |
+| ![an account](docs/shots/08-terminal-record.png) | ![the map](docs/shots/12-terminal-map-outages.png) |
+| the terminal: a record, with a medical alert | the terminal: circuits with trouble |
+| ![the handover](docs/shots/12b-tutorial.png) | ![a call in the terminal](docs/shots/12c-terminal-on-call.png) |
+| the handover call, waiting for you to do the thing | a live call docked under the terminal while you work |
+| ![1956](docs/shots/15-1956-call.png) | ![please hold](docs/shots/20-please-hold.png) |
+| a caller whose line does not sound like 1999 | the end of the slice |
 
 ---
 
@@ -253,7 +280,8 @@ src/
   style.css           the interface
   vendor/             three.js r169 (vendored, unmodified)
   engine/             renderer, postfx, materials, textures, noise, audio,
-                      input, controls (every binding), quality, bus
+                      phonemes (spelling -> speech), input,
+                      controls (every binding), quality, bus
   world/              plan, office builder, props, workstation, signage, lighting, weather, dress
   game/               clock, state, settings, save, player, interaction,
                       phone, dialogue, effects, calls, database, outages,
