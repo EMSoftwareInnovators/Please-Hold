@@ -85,8 +85,8 @@ result was checked, not assumed.
       `{action}` tokens and are expanded per input family at display time
 - [x] 14 call scripts — 238 nodes, 420 lines, 169 player replies
 - [x] The full slice runs start to finish: 29/29 playthrough assertions pass,
-      22/22 tutorial assertions, 29/29 control assertions, 21/21 audio-render
-      assertions
+      22/22 tutorial assertions, 33/33 control assertions, 19/19 pad-only
+      assertions, 21/21 audio-render assertions
 
 ---
 
@@ -100,8 +100,8 @@ result was checked, not assumed.
 | **Doors** | Room doors are geometry and are drawn ajar. They do not open. The exit door is correctly locked and solid. |
 | **Crew skills** | Skill matching, "not rated for this" and the follow-up radio call are implemented. Crews never refuse a job, get tired, or go out of service on their own. |
 | **The second clock** | The corridor clock carries the drift and the horror event sets it. Nothing yet forces the player to notice; it rewards a player who checks. |
-| **Options** | All options apply. Bindings are one table in `engine/controls.js`, which is what a rebinding UI would edit; there is no such UI yet, and no stick-sensitivity or invert-Y option for a pad. |
-| **Gamepad** | Movement, look, menus, the telephone and the terminal are all on the pad, and hints re-label themselves. There is no on-screen keyboard, so the account search still needs a keyboard to type into. |
+| **Options** | All options apply and the panel is now navigable with a d-pad. Bindings are one table in `engine/controls.js`, which is what a rebinding UI would edit; there is no such UI yet, and no stick-sensitivity or invert-Y option for a pad. |
+| **Gamepad** | The whole game is playable on a pad with no keyboard at all, including text entry (`tools/pad.mjs` proves it end to end). What has never happened is a human holding a real controller: dead zones, trigger rest values and the scheme detector are all untested against hardware. |
 
 ---
 
@@ -141,9 +141,10 @@ result was checked, not assumed.
    in CI, and nothing here has confirmed a real stick's dead zone, a trigger's
    resting value, or that a DualSense reports the id the scheme detector
    expects.
-9. **The account search cannot be typed into with a pad**, as above. On a
-   controller the shoulder buttons reach every screen and every list, but the
-   one text field in the game needs a keyboard.
+9. **Nothing in the building makes the player stand up.** The whole slice can
+   be finished without leaving the chair, which caps how much the corridor,
+   the records room and the rest of the office can ever be worth. See
+   "The building at night" below for the design note.
 
 ---
 
@@ -193,10 +194,79 @@ The pipeline is finished and unused. Recording even the 30 lines of
 * the CALL screen should show a returning caller's previous tickets inline —
   Mrs. Daley calling back is the obvious case, and it is one query
 
-### 6. The building at night
-* working doors, with the records room lockable
-* a light-switch interaction, so darkness can be the player's own fault
-* a second floor or a basement for the equipment room the conduit implies
+### 6. The building at night — and getting the player out of the chair
+
+**Not implemented. This is the design note for it.**
+
+The desk is safe. It has a task, a screen, and a phone that tells you what to
+do next. That is exactly why the horror needs the player *out* of it: the
+corridor is only frightening if leaving the desk costs something, and right
+now nothing ever asks them to. A player can finish the whole slice without
+standing up once.
+
+The rule that should govern all of this: **the reason to get up must come from
+the job, and the cost of getting up must be the phone.** Never a locked door
+that opens when a timer says so, never "go and look at the spooky thing". The
+player should stand up because a caller needs something that is not at the
+desk, and should feel the line ringing behind them the whole way.
+
+Ranked by how much they earn:
+
+1. **The log book, not the log screen.** The supervisor's line in the handover
+   is already "write it down". Put a paper log on the far counter — the one
+   the day shift actually uses — and make certain things only recordable
+   there: the anomalies. The terminal's LOG screen holds what the terminal
+   believes; the paper holds what the player saw. When those two disagree
+   later, the player walked across the room to create the evidence, which is
+   worth far more than being shown it. Cost: the phone can ring while you are
+   at the counter, and you have to decide whether to finish the sentence.
+
+2. **The breaker panel / the fuse cabinet.** A brownout drops the terminal or
+   the lights, and it comes back by hand. This is the most natural "you must
+   leave the desk NOW, with a call live" pressure in the building, and the
+   horror events already simulate the failure — they just currently fix
+   themselves. Put a held caller on the line first and it is a real trade.
+
+3. **Records: the microfilm cartons.** An account older than the CIS (the 1961
+   service date on Daley's record is a hook already in the data) has nothing
+   on the terminal. To answer a question about it the player has to go and
+   open a drawer. This is where a 1956 account SHOULD be findable on paper —
+   and where the paper can say something the terminal does not. Best possible
+   home for a document the player finds rather than is told.
+
+4. **The radio base station, if it stops answering the desk mic.** A crew that
+   can only be raised from the set on the far wall gets the player up with
+   their back to the phone, listening to somebody describe what they are
+   looking at. The radio already has per-crew voices and a queue.
+
+5. **Coffee, cigarettes, the thermostat, the window.** The mundane one, and do
+   not skip it. Gloria already mentions the thermostat lying. A player who
+   gets up for nothing at all — because it is 3am and they are bored — is a
+   player who has decided the room is safe, which is the state you want them
+   in immediately before it is not. This wants no mechanics: just a reason to
+   be standing in the wrong place at the wrong time.
+
+What the horror gets in return, once any of those exist:
+* the desk can be occupied while the player is away from it (the chair turned,
+  the terminal on a screen they did not leave it on, a ticket they did not
+  write, the handset off the hook)
+* the phone ringing becomes a sound you walk *toward*, which is a different
+  emotion from a sound you answer
+* the corridor stops being scenery
+* and the 1978 dispatcher at the end lands harder if the player has spent the
+  night learning that this room does things when nobody is sitting in it
+
+Supporting work this needs, in order: working doors (the records room wants to
+be lockable), a light switch so darkness can be the player's own fault, and
+carryable/readable paper as an interaction kind. A second floor or the
+basement the conduit implies is the biggest version of this and the least
+necessary.
+
+**One constraint worth writing down now:** if the player is away from the desk
+when a story beat is due, the beat must WAIT, not fire into an empty chair.
+The director already holds calls for a hold-grace period; leaving the desk
+should extend the same courtesy, or the game will punish the exploration it
+just asked for.
 
 ### 7. The voices, one more pass
 The synthesizer has consonants and transitions now, which is the difference
@@ -211,8 +281,6 @@ between beeps and speech, but it is still not a person. The next gains are:
 ### 8. Controls polish
 * a rebinding UI over the `ACTIONS` table (the data is already shaped for it)
 * stick sensitivity, dead zone and invert-Y in Options
-* an on-screen keyboard for the account search, so a pad can finish a shift
-  without reaching for a keyboard
 * test on a real controller: dead zones, trigger rest values, and whether a
   DualSense reports an id the scheme detector recognises
 

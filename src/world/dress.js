@@ -94,7 +94,7 @@ export function dressBuilding(scene, mats, office) {
   chair.position.set(DESK.seat.x + 0.06, 0, DESK.seat.z + 0.28);
   root.add(chair);
   usable(interactables, chair, {
-    id: 'seat', label: 'DISPATCH DESK', verb: 'Sit', range: 1.9,
+    id: 'seat', label: 'DISPATCH DESK', verb: 'Sit at', seatedVerb: 'Stand up from', range: 1.9,
   });
   out.chair = chair;
 

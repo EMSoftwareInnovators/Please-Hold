@@ -59,6 +59,14 @@ export class TerminalView {
       this.terminal.select(r.dataset.id);
     });
     this.el.body.addEventListener('click', (e) => {
+      const cell = e.target.closest('[data-cell]');
+      if (cell) {
+        if (this.onInteract) this.onInteract();
+        this.terminal.kbCursor = Number(cell.dataset.cell);
+        this.terminal.pressKey(this.terminal.describe().rows
+          .find((x) => x.k === 'grid').cells[this.terminal.kbCursor]);
+        return;
+      }
       const r = e.target.closest('[data-id]');
       if (!r) return;
       if (this.onInteract) this.onInteract();
@@ -80,7 +88,7 @@ export class TerminalView {
       t.screen, t.cursor, t.scroll, t.input, t.message, t.powered,
       t.record ? t.record.id : '', t.ticket ? t.ticket.id : '',
       t.draft ? `${t.draft.cause}|${t.draft.hazard}` : '',
-      t.dirty, this.clock.stamp(this.clock.displayMinutes),
+      t.dirty, t.keyboard ? `kb${t.kbCursor}` : '', this.clock.stamp(this.clock.displayMinutes),
       this.lineAlert ? `${this.lineAlert.kind}${this.lineAlert.text}` : '',
       this.hint || '',
       this.input ? this.input.scheme : 'kbm',
@@ -160,8 +168,15 @@ export class TerminalView {
         return `<div class="t-kv${r.warn ? ' warn' : ''}">`
           + `<span class="l">${escapeHtml(r.label)}</span><span class="v">${escapeHtml(r.value)}</span></div>`;
       case 'map': return '<div class="t-map"><canvas></canvas></div>';
+      case 'grid':
+        return `<div class="t-grid" style="grid-template-columns:repeat(${r.perRow},1fr)">`
+          + r.cells.map((c, i) => (
+            `<button class="cell${i === r.sel ? ' sel' : ''}" data-cell="${i}">${escapeHtml(c)}</button>`
+          )).join('')
+          + '</div>';
       case 'item': {
         const cls = ['t-item'];
+        if (r.field) cls.push('t-item-field');
         if (r.sel) cls.push('sel');
         if (r.warn) cls.push('warn');
         if (r.off) cls.push('off');

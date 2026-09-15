@@ -57,6 +57,17 @@ export const TABS = [
 
 const CAUSES = ['UNKNOWN', 'FUSE', 'TREE ON LINE', 'SERVICE DROP', 'WIRE DOWN', 'BROKEN POLE', 'TRANSFORMER'];
 
+/* The on-screen keys, for a player who has no keyboard in front of them.
+   Four rows of ten, so a d-pad reaches anything in at most five presses, and
+   laid out alphabetically rather than QWERTY because this is a 1999 utility
+   terminal and because nobody hunts for keys faster on a grid they have to
+   learn. The last three cells are space, backspace and search. */
+const KEY_COLS = 10;
+const KEY_CELLS = [
+  ...'ABCDEFGHIJ', ...'KLMNOPQRST', ...'UVWXYZ0123', ...'456789-',
+  '␣', '⌫', '↵',
+];
+
 /* ---------- ROW KINDS ----------
    head  a section heading
    rule  a horizontal rule
@@ -101,6 +112,14 @@ export class Terminal {
     this.focused = false;
 
     this.input = '';
+    /* The query the visible results belong to. Without this, typing a second
+       name and pressing RETURN opened the FIRST result of the PREVIOUS
+       search: the results list was non-empty, so RETURN was read as "open the
+       selected row" rather than "run this query". */
+    this.searched = null;
+    /** The on-screen keyboard: open, and which cell is under the cursor. */
+    this.keyboard = false;
+    this.kbCursor = 0;
     this.cursor = 0;
     this.scroll = 0;
     this.results = [];
@@ -280,34 +299,60 @@ export class Terminal {
   }
 
   _accounts() {
+    /* The search box is a selectable ROW, not just a field. That is the only
+       reason this screen is reachable without a keyboard: a controller lands
+       on it, presses A, and gets the on-screen keys. */
     const rows = [
-      row('field', { label: 'SEARCH', value: this.input, caret: true }),
-      row('note', { t: 'type an account number, a name, a telephone number or a street, then RETURN' }),
-      row('rule'),
+      row('item', {
+        id: 'search',
+        sel: this.cursor === 0 && !this.keyboard,
+        field: true,
+        label: 'SEARCH',
+        value: this.input,
+        cols: ['SEARCH', `${this.input}${this.keyboard ? '' : '_'}`],
+        cw: ['12cqw', '1 1 40cqw'],
+      }),
     ];
+    if (this.keyboard) {
+      rows.push(row('grid', { cells: KEY_CELLS, perRow: KEY_COLS, sel: this.kbCursor }));
+      rows.push(row('note', { t: 'pick letters, then ↵ to search' }));
+    } else {
+      rows.push(row('note', { t: 'type a name, a number or a street, then RETURN — or RETURN here for on-screen keys' }));
+    }
+    rows.push(row('rule'));
     if (!this.results.length) {
       rows.push(row('gap'));
       rows.push(row('dim', { t: 'TRY:' }));
       rows.push(row('dim', { t: '   DALEY          555-0203        WH-40988' }));
       rows.push(row('dim', { t: '   ORCHARD        MH-11           MARROW HILL' }));
     } else {
+      rows.push(row('dim', {
+        t: this.input !== this.searched
+          ? `SHOWING RESULTS FOR "${this.searched}" — RETURN TO SEARCH AGAIN`
+          : `${this.results.length} MATCH${this.results.length === 1 ? '' : 'ES'} FOR "${this.searched}"`,
+      }));
       rows.push(row('cols', { cw: COLS.account, cols: ['ACCOUNT', 'NAME', 'SERVICE ADDRESS', 'CKT'] }));
       this.results.slice(0, 12).forEach((r, i) => {
         rows.push(row('item', {
           id: `acct:${r.id}`,
-          sel: this.cursor === i,
+          sel: !this.keyboard && this.cursor === i + 1,
           cw: COLS.account,
           warn: !!r.flagged,
           cols: [r.id, r.name, r.address || '—', r.feeder],
         }));
       });
     }
+    const pending = this.input && this.input !== this.searched;
     return {
       title: 'CUSTOMER ACCOUNT INQUIRY',
       rows,
-      keys: this.results.length
-        ? [['nav', 'select'], ['select', 'open record'], [null, 'type to search again']]
-        : [[null, 'type a name, number or street'], ['select', 'search']],
+      keys: this.keyboard
+        ? [['nav', 'move'], ['select', 'press the key'], ['cancel', 'done']]
+        : pending
+          ? [['select', 'search']]
+          : this.results.length
+            ? [['nav', 'select'], ['select', 'open record'], [null, 'type to search again']]
+            : [['select', 'on-screen keys'], [null, 'or just type']],
     };
   }
 
@@ -355,9 +400,10 @@ export class Terminal {
       rows.push(row('gap'));
       rows.push(row('dim', { t: 'NO OPEN TICKETS.' }));
       rows.push(row('gap'));
-      rows.push(row('note', { t: 'press N to open a new trouble ticket' }));
+      rows.push(row('item', { id: 'new', sel: true, cw: COLS.cause, cols: ['>> NEW TROUBLE TICKET'] }));
       rows.push(row('gap'), row('rule'), row('head', { t: 'UNIT STATUS' }));
       rows.push(row('cols', { cw: COLS.roster, cols: ['UNIT', 'LEAD', 'STATUS', 'ON'] }));
+      this.cursor = 0;
       for (const c of this.sys.crews.crews) {
         rows.push(row('text', {
           cw: COLS.roster,
@@ -368,10 +414,12 @@ export class Terminal {
       return {
         title: 'TROUBLE TICKET FILE',
         rows,
-        keys: [['newTicket', 'new ticket'], ['screens', 'other screens']],
+        keys: [['select', 'new ticket'], ['screens', 'other screens']],
       };
     }
 
+    rows.push(row('item', { id: 'new', cw: COLS.cause, cols: ['>> NEW TROUBLE TICKET'] }));
+    rows.push(row('gap'));
     rows.push(row('cols', { cw: COLS.ticket, cols: ['TICKET', 'CKT', 'ADDRESS', 'CAUSE', 'MTRS', 'STATUS'] }));
     for (const t of list.slice(0, 14)) {
       const open = this.ticket === t;
@@ -441,14 +489,27 @@ export class Terminal {
       rows.push(row('item', { id: `cause:${c}`, sel: this.cursor === i, cw: COLS.cause, cols: [c] }));
     });
     rows.push(row('gap'));
-    rows.push(row(d.hazard ? 'warn' : 'kv', {
-      label: 'HAZARD', value: d.hazard ? 'YES — WIRE DOWN / PUBLIC DANGER' : 'NO',
-      t: d.hazard ? 'HAZARD: YES — WIRE DOWN / PUBLIC DANGER' : undefined,
+    /* Hazard is a ROW, not a key. It used to be H, which a controller has no
+       way to press -- and a toggle you can see is better than a toggle you
+       have to be told about anyway. */
+    rows.push(row('item', {
+      id: 'hazard',
+      sel: this.cursor === CAUSES.length,
+      warn: d.hazard,
+      cw: COLS.cause,
+      cols: [d.hazard ? '[X] HAZARD — WIRE DOWN / PUBLIC DANGER' : '[ ] HAZARD'],
+    }));
+    rows.push(row('gap'));
+    rows.push(row('item', {
+      id: 'commit',
+      sel: this.cursor === CAUSES.length + 1,
+      cw: COLS.cause,
+      cols: ['>> OPEN THIS TICKET'],
     }));
     return {
       title: 'NEW TROUBLE TICKET',
       rows,
-      keys: [['nav', 'cause'], ['hazard', 'toggle hazard'], ['select', 'open ticket'], ['cancel', 'cancel']],
+      keys: [['nav', 'move'], ['select', 'choose / open'], ['cancel', 'cancel']],
     };
   }
 
@@ -503,11 +564,29 @@ export class Terminal {
     /* Back, one step at a time: an open record, a half-written ticket, an
        expanded ticket, then the screen, then out of the terminal entirely. */
     if (k === 'Escape') {
+      if (this.keyboard) { this.keyboard = false; return true; }
       if (this.record) { this.record = null; return true; }
       if (this.draft) { this.draft = null; return true; }
       if (this.screen === SCREENS.OUTAGE && this.ticket) { this.ticket = null; this.cursor = 0; return true; }
       if (this.screen !== SCREENS.CALL) { this.go(SCREENS.CALL); return true; }
       return false;                      // game.js reads this as "step back"
+    }
+
+    /* The on-screen keyboard owns the arrows while it is open, and it is the
+       only thing in the terminal that needs left and right. */
+    if (this.keyboard && this.screen === SCREENS.ACCOUNT) {
+      const n = KEY_CELLS.length;
+      const move = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -KEY_COLS, ArrowDown: KEY_COLS }[k];
+      if (move !== undefined) {
+        this.kbCursor = (this.kbCursor + move + n) % n;
+        return true;
+      }
+      if (k === 'Enter') { this.pressKey(KEY_CELLS[this.kbCursor]); return true; }
+      // A real keyboard still works while the on-screen one is up; somebody
+      // who reaches for it clearly has one.
+      if (k === 'Backspace') { this.type('\b'); return true; }
+      if (k.length === 1 && /[A-Za-z0-9\s\-]/.test(k)) { this.type(k); return true; }
+      return true;
     }
 
     const items = this._items();
@@ -554,12 +633,58 @@ export class Terminal {
      streets and the letter part of an account number all still work, which is
      what people actually type. */
   _typing(k) {
-    if (k === 'Backspace') { this.input = this.input.slice(0, -1); return true; }
-    if (k.length === 1 && /[A-Za-z\s\-.,#]/.test(k)) {
-      this.input = (this.input + k).toUpperCase().slice(0, 40);
-      return true;
-    }
+    if (k === 'Backspace') { this.type('\b'); return true; }
+    if (k.length === 1 && /[A-Za-z\s\-.,#]/.test(k)) { this.type(k); return true; }
     return true;
+  }
+
+  /**
+   * One way in for text, whether it came from a keyboard or from the
+   * on-screen keys a controller uses.
+   *
+   * Typing after a completed search starts a NEW query rather than appending
+   * to the old one -- the box is a search field, not a document, and the
+   * previous version left the player editing "DALEYPRZ".
+   */
+  type(ch) {
+    if (this.searched !== null && this.input === this.searched && ch !== '\b') {
+      this.input = '';
+      this.results = [];
+      this.searched = null;
+      this.cursor = 0;
+    }
+    if (ch === '\b') this.input = this.input.slice(0, -1);
+    else this.input = (this.input + ch).toUpperCase().slice(0, 40);
+    this.dirty = true;
+  }
+
+  /** Open the on-screen keys, from a controller or from a click. */
+  openKeyboard(on = true) {
+    this.keyboard = on;
+    this.kbCursor = 0;
+    this.dirty = true;
+  }
+
+  /** One cell of the on-screen keyboard. */
+  pressKey(cell) {
+    if (cell === '␣') this.type(' ');
+    else if (cell === '⌫') this.type('\b');
+    else if (cell === '↵') { this.keyboard = false; this.runSearch(); }
+    else this.type(cell);
+    this.dirty = true;
+  }
+
+  /** Run whatever is in the box. */
+  runSearch() {
+    this.results = this.sys.database.search(this.input);
+    this.searched = this.input;
+    /* Land on the first RESULT, not back on the search box: the search row is
+       row zero now, and leaving the cursor there made the next RETURN re-run
+       the same query instead of opening what it found. */
+    this.cursor = this.results.length ? 1 : 0;
+    this.dirty = true;
+    if (!this.results.length) this.toast('NO RECORDS MATCH');
+    return this.results;
   }
 
   /** RETURN, or a click on a row. */
@@ -579,10 +704,17 @@ export class Terminal {
       }
       case SCREENS.ACCOUNT: {
         if (this.record) return;
-        if (!this.results.length || !item) {
-          this.results = this.sys.database.search(this.input);
-          this.cursor = 0;
-          if (!this.results.length) this.toast('NO RECORDS MATCH');
+        if (this.keyboard) { this.pressKey(KEY_CELLS[this.kbCursor]); return; }
+        if (item && item.id === 'search') {
+          // An empty box wants letters; a full one wants running.
+          if (this.input && this.input !== this.searched) this.runSearch();
+          else this.openKeyboard();
+          return;
+        }
+        // A query that has not been run yet always runs. Only once what is on
+        // screen matches what is in the box does RETURN open a row.
+        if (this.input !== this.searched || !this.results.length || !item) {
+          this.runSearch();
           return;
         }
         this.openRecord(item.id.split(':')[1]);
@@ -590,11 +722,24 @@ export class Terminal {
       }
       case SCREENS.OUTAGE: {
         if (this.draft) {
-          if (item) this.draft.cause = item.id.split(':')[1];
+          if (!item) { this.commitTicket(); return; }
+          if (item.id === 'hazard') {
+            this.draft.hazard = !this.draft.hazard;
+            this.draft.cause = this.draft.hazard && this.draft.cause === 'UNKNOWN'
+              ? 'WIRE DOWN' : this.draft.cause;
+            this.dirty = true;
+            return;
+          }
+          if (item.id === 'commit') { this.commitTicket(); return; }
+          // A cause row both picks the cause and opens the ticket: choosing
+          // one is the decision, and a second confirmation is a keypress that
+          // asks nothing.
+          this.draft.cause = item.id.split(':')[1];
           this.commitTicket();
           return;
         }
         if (!item) return;
+        if (item.id === 'new') { this._startTicketFrom(this._callerRecord()); return; }
         const [kind, id] = item.id.split(':');
         if (kind === 'crew') { this.dispatchTo(id); return; }
         // Opening a ticket drops its units in underneath it; opening the one
@@ -758,6 +903,16 @@ export class Terminal {
         case 'field': put(`${r.label}: ${r.value}${this._blink < 0.25 ? '_' : ''}`, AMBER_BRIGHT); break;
         case 'kv': put(`${String(r.label).padEnd(18)}${r.value}`, r.warn ? RED : AMBER); break;
         case 'cols': put(r.cols.join('  '), AMBER_DIM); break;
+        case 'grid': {
+          // The tube is read from across the room, so it shows the keys as
+          // plain rows with the selected one marked.
+          for (let i = 0; i < r.cells.length; i += r.perRow) {
+            const line = r.cells.slice(i, i + r.perRow)
+              .map((ch, j) => (i + j === r.sel ? `[${ch}]` : ` ${ch} `)).join('');
+            put(line, AMBER);
+          }
+          break;
+        }
         case 'item':
           put(`${r.sel ? '>' : ' '}${r.cols.join('  ')}`,
             r.warn ? RED : r.off ? AMBER_DIM : r.sel ? AMBER_BRIGHT : AMBER);

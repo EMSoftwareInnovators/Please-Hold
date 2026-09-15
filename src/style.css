@@ -74,6 +74,15 @@ html, body {
   text-shadow: 0 1px 6px #000; pointer-events: none;
 }
 
+#seatbar {
+  position: absolute; left: 22px; bottom: 20px;
+  display: flex; gap: 14px; align-items: baseline;
+  font-size: 11px; letter-spacing: 0.18em; color: var(--amber-dim);
+  text-shadow: 0 1px 6px #000; pointer-events: none;
+}
+#seatbar span { display: flex; align-items: baseline; gap: 6px; }
+#seatbar b { font-weight: normal; color: var(--amber); border: 1px solid var(--edge); padding: 1px 5px; }
+
 #clock {
   position: absolute; top: 18px; right: 22px; text-align: right;
   line-height: 1.25; text-shadow: 0 1px 8px #000;
@@ -156,6 +165,20 @@ html, body {
 
 /* A unit listed underneath the ticket it would be sent to. The indent and the
    rule are the only thing saying "these belong to that", so they matter. */
+.t-grid {
+  display: grid; gap: 0.5cqh 0.5cqw; margin: 0.8cqh 0 1cqh; padding: 0 1cqw;
+}
+.t-grid .cell {
+  font: inherit; font-size: 1.5cqw; line-height: 1.6;
+  background: rgba(10, 9, 7, 0.8); color: var(--amber);
+  border: 1px solid rgba(255, 182, 65, 0.22); cursor: pointer; padding: 0.3cqh 0;
+}
+.t-grid .cell:hover { color: var(--amber-bright); border-color: var(--amber); }
+.t-grid .cell.sel {
+  background: var(--amber); color: #120b04; border-color: var(--amber-bright);
+}
+.t-item.t-item-field .c1 { color: var(--amber-bright); letter-spacing: 0.08em; }
+
 .t-item.nest, .t-cols.nest { margin-left: 4cqw; border-left: 1px solid rgba(255, 182, 65, 0.18); }
 .t-cols.nest { padding-left: 1cqw; }
 /* Docked to the bottom of the screen under the terminal, and drawn in the
@@ -456,6 +479,8 @@ html, body {
 #panel dl { display: grid; grid-template-columns: 130px 1fr; gap: 4px 14px; margin: 0; }
 #panel dt { color: var(--amber); letter-spacing: 0.1em; }
 #panel dd { margin: 0; color: #cdb489; }
+#panel .opt.sel { background: rgba(255, 182, 65, 0.10); box-shadow: inset 2px 0 0 var(--amber); }
+#panel .opt.sel > span:first-child { color: var(--amber-bright); }
 #panel .opt { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 7px 0; border-bottom: 1px solid rgba(255,182,65,0.08); }
 #panel .opt > span:first-child { color: var(--amber); letter-spacing: 0.1em; }
 #panel .opt em { display: block; font-style: normal; font-size: 10px; letter-spacing: 0.06em; color: #7d7460; margin-top: 2px; }

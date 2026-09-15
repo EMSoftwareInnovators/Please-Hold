@@ -51,7 +51,7 @@ export class Input {
     this.wantsLock = false;
     /** True when we want the pointer but do not have it. The HUD says so. */
     this.lockBlocked = false;
-    /** Seconds until the next automatic re-lock attempt. See _retryLock. */
+    /** Wall-clock time of the next automatic re-lock attempt. See _retryLock. */
     this._lockRetry = 0;
     this.listeners = { key: [], click: [] };
 
@@ -154,14 +154,19 @@ export class Input {
    * once the cooldown passes -- so keep asking, quietly, instead of waiting to
    * be rescued by a click.
    */
-  _retryLock(dt) {
+  _retryLock() {
     if (!this.wantsLock || this.locked || document.pointerLockElement) {
       this._lockRetry = 0;
       return;
     }
-    this._lockRetry -= dt;
-    if (this._lockRetry > 0) return;
-    this._lockRetry = LOCK_RETRY;
+    /* Wall clock, not the frame's dt. The game clamps dt to 50ms so a slow
+       frame cannot teleport the player -- which means counting dt makes this
+       wait 0.7 SECONDS OF SIMULATION, and at ten frames a second that is most
+       of a minute of real time with no camera. How long the browser's cooldown
+       lasts has nothing to do with how fast the game is running. */
+    const now = performance.now();
+    if (now < this._lockRetry) return;
+    this._lockRetry = now + LOCK_RETRY * 1000;
     this.requestLock();
   }
 
@@ -230,7 +235,7 @@ export class Input {
      press is indistinguishable from the keyboard downstream.
      ============================================================ */
   poll(dt) {
-    this._retryLock(dt);
+    this._retryLock();
     this.padMove.x = 0; this.padMove.y = 0;
     this.padLook.x = 0; this.padLook.y = 0;
 

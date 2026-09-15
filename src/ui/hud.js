@@ -29,6 +29,7 @@ export class HUD {
       toasts: $('toasts'),
       objective: $('objective'),
       lockhint: $('lockhint'),
+      seatbar: $('seatbar'),
       reticle: $('reticle'),
       perf: $('perf'),
     };
@@ -109,6 +110,27 @@ export class HUD {
   setLockHint(on) {
     if (!this.el.lockhint) return;
     this.el.lockhint.classList.toggle('hidden', !on);
+  }
+
+  /**
+   * What is available at the desk, while the player is at it.
+   *
+   * Sitting down used to be a one-way door: standing again was Q, Q was
+   * printed nowhere during play, and the chair prompt still said "Sit". The
+   * way out of a state has to be visible from inside it.
+   */
+  setSeated(on) {
+    if (!this.el.seatbar) return;
+    const scheme = this.input ? this.input.scheme : 'kbm';
+    if (on && this._seatScheme !== scheme) {
+      this._seatScheme = scheme;
+      const g = (a) => escapeHtml(controlLabel(a, scheme));
+      this.el.seatbar.innerHTML = `<span>SEATED</span>`
+        + `<span><b>${g('stand')}</b>stand up</span>`
+        + `<span><b>${g('terminal')}</b>terminal</span>`;
+    }
+    if (!on) this._seatScheme = null;
+    this.el.seatbar.classList.toggle('hidden', !on);
   }
 
   setObjective(text, pulse = false) {

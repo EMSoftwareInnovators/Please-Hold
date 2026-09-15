@@ -63,8 +63,10 @@ export const ACTIONS = {
      button. These are label-only: the real bindings are `screens` above. */
   screenAccounts: { keys: [], pad: [], labels: { kbm: 'press 3', xbox: 'LB / RB to ACCOUNTS', playstation: 'L1 / R1 to ACCOUNTS' } },
   screenTickets: { keys: [], pad: [], labels: { kbm: 'press 2', xbox: 'LB / RB to TICKETS', playstation: 'L1 / R1 to TICKETS' } },
-  newTicket: { keys: ['KeyN'], pad: [], labels: { kbm: 'N', xbox: 'N', playstation: 'N' } },
-  hazard: { keys: ['KeyH'], pad: [], labels: { kbm: 'H', xbox: 'H', playstation: 'H' } },
+  /* The trigger is free inside the terminal (running is a world verb), so a
+     controller gets the one shortcut worth having. Everything else it needs
+     is reachable by navigating to a row -- see the note in terminal.js. */
+  newTicket: { keys: ['KeyN', 'PadLT'], pad: [6], labels: { kbm: 'N', xbox: 'LT', playstation: 'L2' } },
 
   /* ---------------- system ---------------- */
   pause: { keys: ['Escape', 'PadStart'], pad: [9], labels: { kbm: 'ESC', xbox: 'MENU', playstation: 'OPTIONS' } },

@@ -60,11 +60,20 @@ export class InteractionSystem {
   }
 
   _set(found) {
-    const changed = (found && found.spec.id) !== (this.current && this.current.spec.id);
+    /* The prompt has to change when the PLAYER changes too, not only when
+       they look at something else: the same chair reads "Sit" standing up and
+       "Stand up from" sitting down, and the old comparison never noticed. */
+    const key = found ? `${found.spec.id}:${this.player.seated ? 'sat' : 'up'}` : '';
     this.current = found;
-    if (changed) {
-      bus.emit('ui:prompt', found ? { label: found.spec.label, verb: found.spec.verb, id: found.spec.id } : null);
-    }
+    if (key === this._promptKey) return;
+    this._promptKey = key;
+    if (!found) { bus.emit('ui:prompt', null); return; }
+    const { spec } = found;
+    bus.emit('ui:prompt', {
+      label: spec.label,
+      verb: (this.player.seated && spec.seatedVerb) || spec.verb,
+      id: spec.id,
+    });
   }
 
   /** The player pressed Use. */

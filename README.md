@@ -96,6 +96,7 @@ npm run check:render    # render the audio to ./audio/*.wav and measure it
 npm run check:audio     # live bus levels, balance and voice-chain leaks
 npm run check:tutorial  # play the handover call gate by gate
 npm run check:controls  # key routing, pointer lock, the pause-menu loop
+npm run check:pad       # the whole job with pad buttons and no keyboard
 node tools/perf.mjs     # lights, draw calls and render target per preset
 npm run shots           # capture screenshots to ./shots
 ```
@@ -123,7 +124,7 @@ every key hint on screen prints itself in whatever the player is holding.
 | mouse | right stick | look |
 | `Shift` | `LT` / `L2` | move quickly |
 | `E` | `A` / `✕` | use what you are looking at |
-| `Q` | `L3` | stand up from the desk |
+| `Q` | `L3` | stand up from the desk (or use the chair again) |
 | `Esc` | `Menu` / `Options` | pause |
 | `F3` | — | frame time, draw calls, light count (outside the terminal) |
 
@@ -154,10 +155,9 @@ Some will not, and they will remember.
 | `1` – `5` | `LB` / `RB` (`L1` / `R1`) | call, tickets, accounts, map, log |
 | arrows | d-pad | move the selection |
 | `Return` | `A` / `✕` | pull a record, open a ticket, send a unit |
-| `N` | — | open a trouble ticket for whoever is on the line |
-| `H` | — | (on a new ticket) mark it a hazard |
+| `N` | `LT` / `L2` | open a trouble ticket for whoever is on the line |
 | `Esc` | `B` / `○` | back one step |
-| mouse | — | click the tabs, click any row |
+| mouse | — | click the tabs, click any row, press the on-screen keys |
 
 Five screens, and the two you live on are `1` and `2`.
 
@@ -176,6 +176,20 @@ the work, and the game will let you send them.
 
 **`3` ACCOUNTS** is the search, for when you need somebody who is not on the
 line: the neighbour, the address that does not match what you are being told.
+Type into it, or press `Return` on the search box for on-screen keys.
+
+### Playing on a controller, with no keyboard at all
+
+Everything is reachable with a pad — including the parts that used to be
+letter keys. The search box opens an on-screen keyboard; the hazard flag on a
+new ticket is a row you select rather than an `H` you have to know about; a new
+ticket is a row at the top of the list as well as a trigger; and the options
+panel is navigable with the d-pad instead of only being clickable.
+
+`npm run check:pad` plays a whole call — answer, read the account, spell a
+name on the on-screen keys, write a ticket, set the hazard flag, dispatch a
+unit — pressing pad buttons and nothing else. If a screen ever grows a letter
+key again, that harness is what catches it.
 
 The screens are on the number row, not `F1` – `F6`: most laptops put the
 function row behind an `Fn` chord, which made the terminal unusable without a

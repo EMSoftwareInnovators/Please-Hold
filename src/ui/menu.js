@@ -25,6 +25,8 @@ export class Menu {
       cabinet: $('cabinet'),
     };
     this.sel = 0;
+    this.optSel = 0;
+    this.optKeys = [];
     this.open = 'title';              // 'title' | 'panel' | null
     this.panelKind = null;
     this._wire();
@@ -67,13 +69,20 @@ export class Menu {
      a d-pad drives the menus exactly as the arrow keys do. */
   handleKey(e) {
     if (this.open === 'panel') {
+      // In Options the arrows belong to the settings, not to scrolling, and
+      // confirm changes a value rather than closing the panel.
+      if (this.panelKind === 'options') {
+        if (isAction('cancel', e) || e.code === 'PadStart') { this.closePanel(); return true; }
+        if (isAction('select', e)) { this.step(this.optKeys[this.optSel], 1); return true; }
+        return this._optionsKey(e);
+      }
       if (isAction('cancel', e) || isAction('select', e) || e.code === 'PadStart') {
         this.closePanel(); return true;
       }
       // The how-to is longer than the panel, and a pad has no scroll wheel.
       if (isAction('down', e)) { this._scrollPanel(1); return true; }
       if (isAction('up', e)) { this._scrollPanel(-1); return true; }
-      return this.panelKind === 'options' ? this._optionsKey(e) : true;
+      return true;
     }
     if (this.open !== 'title') return false;
     const items = [...this.el.menu.children];
@@ -91,7 +100,16 @@ export class Menu {
     this.el.body.scrollTop += dir * Math.max(80, this.el.body.clientHeight * 0.5);
   }
 
-  _optionsKey() { return true; }
+  /** Up/down pick a row, left/right change it, confirm toggles or steps up. */
+  _optionsKey(e) {
+    const keys = this.optKeys || [];
+    if (!keys.length) return true;
+    if (isAction('down', e)) { this.optSel = (this.optSel + 1) % keys.length; this._optScrollInto = true; this.options(); return true; }
+    if (isAction('up', e)) { this.optSel = (this.optSel - 1 + keys.length) % keys.length; this._optScrollInto = true; this.options(); return true; }
+    if (e.code === 'ArrowLeft' || e.code === 'PadLeft') { this.step(keys[this.optSel], -1); return true; }
+    if (e.code === 'ArrowRight' || e.code === 'PadRight') { this.step(keys[this.optSel], 1); return true; }
+    return true;
+  }
 
   activate(act) {
     switch (act) {
@@ -173,6 +191,8 @@ export class Menu {
       </dl>
       <p>Look people up before you confirm anything to them. Several replies are only
       available once you have actually read the account &mdash; that is deliberate.</p>
+      ${pad ? '<p>No keyboard needed: the search box opens on-screen keys, and every '
+        + 'other action in the terminal is a row you can move to.</p>' : ''}
       <p>A call carries on underneath the terminal so you can read it while you work.
       A new reply takes the ${pad ? 'D-PAD' : 'ARROW KEYS'}; touching a screen or a row
       gives them back to the terminal; <b>${g('answer')}</b> turns you back to the caller.</p>
@@ -207,13 +227,20 @@ export class Menu {
       return `${Math.round(v * 100)}%`;
     };
 
-    const row = (label, key, note) => `<div class="opt">
+    /* Every option row is addressable, because a controller has no mouse to
+       click a stepper with and Options was otherwise pointer-only. */
+    const keys = [];
+    const row = (label, key, note) => {
+      keys.push(key);
+      const sel = keys.length - 1 === this.optSel;
+      return `<div class="opt${sel ? ' sel' : ''}" data-opt="${key}">
       <span>${label}${note ? `<em>${note}</em>` : ''}</span>
       <span class="stepper">
         <button data-k="${key}" data-d="-1">&lt;</button>
         <span class="val">${shown(key)}</span>
         <button data-k="${key}" data-d="1">&gt;</button>
       </span></div>`;
+    };
 
     this.panel('options', `
       <h2>OPTIONS</h2>
@@ -242,23 +269,42 @@ export class Menu {
       ${row('TEXT SPEED', 'textSpeed')}
     `);
 
+    this.optKeys = keys;
+    this.optEnums = ENUMS;
+    if (this.optSel >= keys.length) this.optSel = keys.length - 1;
+
     this.el.body.querySelectorAll('button[data-k]').forEach((b) => {
       b.addEventListener('click', () => {
-        const k = b.dataset.k, d = Number(b.dataset.d);
-        const cur = s.get(k);
-        if (ENUMS[k]) {
-          const vals = ENUMS[k].values;
-          const i = Math.max(0, vals.indexOf(cur));
-          s.set(k, vals[Math.max(0, Math.min(vals.length - 1, i + d))]);
-        } else if (typeof cur === 'boolean') {
-          s.set(k, !cur);
-        } else {
-          s.set(k, Math.max(0, Math.min(2, Math.round((cur + d * 0.1) * 100) / 100)));
-        }
-        if (this.actions.applySettings) this.actions.applySettings();
-        this.options();
+        this.optSel = keys.indexOf(b.dataset.k);
+        this.step(b.dataset.k, Number(b.dataset.d));
       });
     });
+    this.el.body.querySelectorAll('[data-opt]').forEach((el) => {
+      el.addEventListener('mousemove', () => {
+        const i = keys.indexOf(el.dataset.opt);
+        if (i >= 0 && i !== this.optSel) { this.optSel = i; this.options(); }
+      });
+    });
+    const sel = this.el.body.querySelector('.opt.sel');
+    if (sel && this._optScrollInto) { sel.scrollIntoView({ block: 'nearest' }); this._optScrollInto = false; }
+  }
+
+  /** Move one option by one step, from a click, a key or a d-pad. */
+  step(key, dir) {
+    const s = this.settings;
+    const cur = s.get(key);
+    const ENUMS = this.optEnums || {};
+    if (ENUMS[key]) {
+      const vals = ENUMS[key].values;
+      const i = Math.max(0, vals.indexOf(cur));
+      s.set(key, vals[Math.max(0, Math.min(vals.length - 1, i + dir))]);
+    } else if (typeof cur === 'boolean') {
+      s.set(key, !cur);
+    } else {
+      s.set(key, Math.max(0, Math.min(2, Math.round((cur + dir * 0.1) * 100) / 100)));
+    }
+    if (this.actions.applySettings) this.actions.applySettings();
+    this.options();
   }
 
   pause() {

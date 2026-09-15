@@ -178,6 +178,13 @@ Three rules came out of that:
    the cursor. Nothing should ever make the player go and find the thing they
    just created.
 
+A search field is a field, not a document: typing after a completed search
+starts a NEW query. The first version appended, so a second lookup left the
+player editing "DALEYPRZ" — and because the results list was non-empty, RETURN
+was read as "open the selected row" and opened the *previous* search's first
+hit. Any list that can go stale relative to its input needs to know which
+input it belongs to; `terminal.searched` is that.
+
 The one thing deliberately NOT automated: pulling the record is still a
 keypress. Several conversations gate on the player having read the account
 (`requires.lookedUp`), and the anomalies live in the detail — the meter that
@@ -232,6 +239,16 @@ Xbox pad and a PlayStation pad.
   left the camera dead after every trip to the terminal. The exit is ours, so
   the browser will hand the lock back once its cooldown passes: `_retryLock`
   keeps asking every 0.7s instead of waiting for a click.
+* **A pad button is not a key, at the edges.** Inside the game they are the
+  same set, but `terminal.js` reads `e.key` and only understands keyboard
+  names — so `PadA` and the d-pad fell straight through its switch and d-pad
+  navigation inside the terminal never worked at all. `PAD_AS_KEY` in game.js
+  substitutes the equivalent key at that boundary. Anywhere else a subsystem
+  reads raw key names, expect the same bug.
+* **A screen that needs a letter key is broken on a controller.** The search
+  box opens on-screen keys; the hazard flag is a row; a new ticket is a row as
+  well as a trigger. `tools/pad.mjs` plays a whole call with pad buttons only
+  and is the guard against this coming back.
 * **No full-screen layer may take pointer events.** `#call` did, and while a
   call was on screen every click in the game landed on the call panel instead
   of the canvas — so the one gesture that could have restored the lock never
@@ -239,6 +256,22 @@ Xbox pad and a PlayStation pad.
 * **Auto-repeat does not reach the game.** Only `REPEATABLE` keys (text
   editing, arrows) are forwarded while held; a held `Esc` used to toggle the
   pause menu dozens of times a second.
+
+### 3d. Every state needs a visible way out
+
+Sitting down was a one-way door for weeks: standing again was `Q`, `Q` was
+printed nowhere during play, and the chair's own prompt still read "Sit" while
+you were sitting in it. Nobody reads the how-to panel mid-shift.
+
+So: if the game can put the player into a state, the way out of that state has
+to be visible **from inside it**. The seated bar in the corner exists for that
+reason, and so does `seatedVerb` on an interaction spec.
+
+The same rule caught a quieter bug: there are two ways into the chair (using
+it, and leaning into the terminal, which seats you on the way) and only one of
+them recorded that it had happened, so a player who reached for the computer
+first sat there being told to sit down. One way in — `game.sitAtDesk()` — for
+anything a gate can wait on.
 
 ## 4. Dialogue is data. Always.
 
@@ -368,6 +401,7 @@ and all of them have caught real bugs:
 | `node tools/tutorial.mjs` | plays the handover call and asserts every `waitFor` gate opens on the right action, that the call stays readable inside the terminal, and that every instruction reaches the screen with real key names |
 | `node tools/controls.mjs` | key routing: the number row, the arrow-key handover between a docked call and the terminal, pad buttons through the same path `input.js` uses, the pause-menu loop, and that the camera comes back on its own |
 | `node tools/render.mjs` | renders the audio offline to real WAVs and measures the envelope. The only harness that can tell rain from static |
+| `node tools/pad.mjs` | plays a whole call with pad buttons only — no keyboard event is generated anywhere in it |
 | `node tools/perf.mjs` | lights, draw calls and render target at each quality preset |
 | `npm run check` | all of the above except perf and shots |
 | `npm run shots` | captures the game at 20 moments, so visual regressions are visible |

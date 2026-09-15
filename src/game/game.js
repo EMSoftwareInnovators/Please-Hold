@@ -57,6 +57,25 @@ import { CALLS } from '../data/calls/index.js';
 
 export const STATE = { BOOT: 'boot', TITLE: 'title', PLAYING: 'playing', PAUSED: 'paused', ENDED: 'ended' };
 
+/**
+ * The terminal speaks keyboard, and only keyboard.
+ *
+ * That was fine until a controller had to work it: `PadA` is not `Enter` and
+ * the d-pad is not the arrow keys, so every pad press fell through the
+ * terminal's switch and did nothing at all -- d-pad navigation inside the
+ * terminal had never once worked. Rather than teach terminal.js about
+ * controllers, which it should not know exist, the equivalent key is
+ * substituted here, at the one place the two meet.
+ */
+const PAD_AS_KEY = {
+  PadA: 'Enter',
+  PadUp: 'ArrowUp',
+  PadDown: 'ArrowDown',
+  PadLeft: 'ArrowLeft',
+  PadRight: 'ArrowRight',
+  PadLT: 'n',                 // the one shortcut: open a trouble ticket
+};
+
 export class Game {
   constructor() {
     this.state = STATE.BOOT;
@@ -261,10 +280,11 @@ export class Game {
     const I = this.interaction;
     const S = this.gameState;
 
+    /* The chair is a toggle. Standing up used to be Q and only Q, which is
+       never shown anywhere on screen during play -- so the desk was a trap. */
     I.on('seat', () => {
-      this.player.sit({ x: DESK.seat.x, z: DESK.seat.z, yaw: DESK.seat.yaw, eye: DESK.seatEye });
-      S.set('sat_down', true);
-      this.hud.setObjective('');
+      if (this.player.seated) this.player.stand();
+      else this.sitAtDesk();
     });
 
     I.on('terminal', () => this.focusTerminal(true));
@@ -471,7 +491,8 @@ export class Game {
          or the player presses the telephone key above. */
       if (e.code !== 'Escape' && e.code !== 'PadB') this.callUI.setFocused(false);
 
-      if (this.terminal.handleKey(e)) e.preventDefault();
+      const asKey = PAD_AS_KEY[e.code];
+      if (this.terminal.handleKey(asKey ? { key: asKey, code: asKey } : e)) e.preventDefault();
       return;
     }
 
@@ -555,10 +576,26 @@ export class Game {
    * still moves) but the player is locked: no look, no movement, and the
    * terminal is opaque so nothing appears to drift behind it.
    */
-  focusTerminal(on) {
-    if (on && !this.player.seated) {
+  /**
+   * Sit down, from wherever the request came from.
+   *
+   * There are two ways to end up in the chair -- using it, and leaning into
+   * the terminal, which sits you down on the way -- and only one of them used
+   * to record that it had happened. The tutorial's first gate waits on
+   * `sat_down`, so a player who reached for the computer instead of the chair
+   * sat there being told to sit down.
+   */
+  sitAtDesk() {
+    if (!this.player.seated) {
       this.player.sit({ x: DESK.seat.x, z: DESK.seat.z, yaw: DESK.seat.yaw, eye: DESK.seatEye });
     }
+    this.gameState.set('sat_down', true);
+    this.objectiveHint = null;
+    this._applyHint();
+  }
+
+  focusTerminal(on) {
+    if (on) this.sitAtDesk();
     this.terminalFocused = on;
     this.terminalView.show(on);
     this.hud.show(!on);
@@ -693,6 +730,7 @@ export class Game {
        the pause menu used to loop. A pad does not need the pointer at all. */
     this.hud.setLockHint(this.state === STATE.PLAYING && !this.terminalFocused
       && this.input.scheme === 'kbm' && this.input.needsClickToLook);
+    this.hud.setSeated(this.state === STATE.PLAYING && !this.terminalFocused && this.player.seated);
     // Plugging a pad in mid-sentence must not leave keyboard names on screen.
     if (this.objectiveHint && this.input.scheme !== this._hintScheme) this._applyHint();
 

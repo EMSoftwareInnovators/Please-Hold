@@ -197,6 +197,39 @@ check('instructions re-word themselves for a pad',
   hints.pad.some((h, i) => h !== hints.kbm[i]) && hints.pad.every((h) => !h.includes('{')),
   hints.pad.find((h, i) => h !== hints.kbm[i]) || '');
 
+/* ---- 5b. the chair is not a trap ----
+   Standing up was Q, Q appears nowhere on screen during play, and the chair
+   itself still said "Sit" while you were sitting in it. */
+await page.evaluate(() => { const g = window.__game; if (g.terminalFocused) g.focusTerminal(false); });
+await page.waitForTimeout(300);
+await page.evaluate(() => window.__game.sitAtDesk());
+await page.waitForTimeout(500);
+const satDown = await page.evaluate(() => ({
+  seated: window.__game.player.seated,
+  flag: window.__game.gameState.has('sat_down'),
+  bar: !document.getElementById('seatbar').classList.contains('hidden'),
+  barText: document.getElementById('seatbar').textContent,
+}));
+check('sitting down is recorded however the player did it',
+  satDown.seated && satDown.flag, JSON.stringify(satDown));
+check('the way back up is on screen while seated',
+  satDown.bar && /stand up/i.test(satDown.barText), JSON.stringify(satDown));
+
+const verb = await page.evaluate(() => {
+  const g = window.__game;
+  let seen = null;
+  const off = window.__bus.on('ui:prompt', (p) => { if (p && p.id === 'seat') seen = p.verb; });
+  g.interaction._promptKey = null;
+  g.interaction._set({ spec: { id: 'seat', label: 'DISPATCH DESK', verb: 'Sit at', seatedVerb: 'Stand up from' } });
+  if (typeof off === 'function') off();
+  return seen;
+});
+check('the chair says "stand up" when you are sitting in it', /stand up/i.test(verb || ''), String(verb));
+
+await page.keyboard.press('q');
+await page.waitForTimeout(400);
+check('Q stands up', !(await page.evaluate(() => window.__game.player.seated)));
+
 /* ---- 6. the pad reaches the terminal and the pause menu ---- */
 await page.evaluate(() => { const g = window.__game; if (g.terminalFocused) g.focusTerminal(false); });
 await page.waitForTimeout(300);
@@ -240,7 +273,10 @@ await page.evaluate(() => { window.__states.length = 0; });
 // A real exit, not a faked event: the browser's own cooldown after one is
 // half of what produced the loop.
 await page.evaluate(() => document.exitPointerLock());
-await page.waitForTimeout(1200);
+/* The browser's own cooldown is about a second and a refused retry waits
+   another 0.7s, so give it a few seconds before calling it dead. What must
+   NOT happen is needing a click. */
+await page.waitForFunction(() => window.__game.input.locked, null, { timeout: 6000 }).catch(() => {});
 const loose = await page.evaluate(() => ({
   state: window.__game.state,
   menu: window.__game.menu.open,
