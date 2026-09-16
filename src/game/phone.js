@@ -99,6 +99,29 @@ export class PhoneSystem {
     if (this.audio) this.audio.play('hookUp');
 
     const call = line.call;
+    /* A ringing line with nothing behind it.
+       There is exactly one moment in the night when this can happen -- 0417,
+       when every lamp on the console lights and the switchboard is not
+       telling the truth about any of them -- and the player is very likely
+       to pick one of those up. It is not an error state. It is the point:
+       you answer, and there is nobody there. */
+    if (!call) {
+      this.state.set('answered_an_empty_line', true);
+      if (this.audio) {
+        this.audio.play('lineDrop', { volume: 0.5, delay: 0.7 });
+      }
+      this.state.log(this.clock.stamp(), `Line ${line.index + 1} answered. No carrier, no caller.`, 'anomaly');
+      setTimeout(() => {
+        if (this.lines[line.index] === line && line.state === LINE_STATE.ACTIVE && !line.call) {
+          this._clear(line);
+          this.activeLine = null;
+          this.offHook = false;
+          bus.emit(EVENTS.LINE_CHANGED, { lines: this.snapshot() });
+        }
+      }, 2600);
+      bus.emit(EVENTS.LINE_CHANGED, { lines: this.snapshot() });
+      return true;
+    }
     const rec = this.state.caller(call.caller.id || call.id);
     rec.calls += 1;
     this.state.bump(`answered:${call.id}`);
@@ -117,11 +140,13 @@ export class PhoneSystem {
     if (index == null) return false;
     const line = this.lines[index];
     if (!line || line.state !== LINE_STATE.ACTIVE) return false;
+    // You cannot put nobody on hold. Answering a second line simply drops it.
+    if (!line.call) { this._clear(line); if (this.activeLine === index) this.activeLine = null; return false; }
 
     line.state = LINE_STATE.HOLD;
     line.heldSeconds = 0;
     line.warned = false;
-    const holdSpec = line.call.hold || {};
+    const holdSpec = (line.call && line.call.hold) || {};
     line.patience = holdSpec.patience ?? 75;
 
     if (this.activeLine === index) {
@@ -135,8 +160,11 @@ export class PhoneSystem {
       this.audio.play('holdClick');
       this._startHoldMusic();
     }
-    const id = line.call.caller.id || line.call.id;
-    this.state.caller(id).lastTopic = this.runner.nodeId;
+    /* An empty line -- the 0417 case -- has nobody to remember. */
+    if (line.call) {
+      const id = line.call.caller.id || line.call.id;
+      this.state.caller(id).lastTopic = this.runner.nodeId;
+    }
     bus.emit(EVENTS.HOLD, { line: line.index, call: line.call, automatic });
     bus.emit(EVENTS.LINE_CHANGED, { lines: this.snapshot() });
     return true;
@@ -186,6 +214,38 @@ export class PhoneSystem {
      ============================================================ */
 
   /** The player hangs up. */
+  /**
+   * Light every lamp on the console at once.
+   *
+   * There is no legitimate way for this to happen and the game has spent
+   * five hours teaching the player that. Used once, at 0417, by a sequence.
+   * Lines that already have a call keep it; the rest ring with nothing
+   * behind them, which is the part that is wrong.
+   */
+  ringAllLines() {
+    for (const l of this.lines) {
+      if (l.state !== LINE_STATE.IDLE) continue;
+      l.state = LINE_STATE.RINGING;
+      l.ringsLeft = 99;
+      l.ringSeconds = 0;
+      l.call = null;                 // a ringing line with no caller on it
+    }
+    this._ringTimer = 0;
+    bus.emit(EVENTS.LINE_CHANGED, { lines: this.snapshot() });
+  }
+
+  /** Drop everything. The switchboard letting go. */
+  hangUpAll(reason = 'carrier') {
+    for (const l of this.lines) {
+      if (l.state === LINE_STATE.IDLE) continue;
+      if (l.call) this.hangUp(l.index, reason);
+      else this._clear(l);
+    }
+    this.activeLine = null;
+    this._stopHoldMusic();
+    bus.emit(EVENTS.LINE_CHANGED, { lines: this.snapshot() });
+  }
+
   hangUp(index = this.activeLine, reason = 'player') {
     if (index == null) return false;
     const line = this.lines[index];
@@ -252,7 +312,9 @@ export class PhoneSystem {
       const line = this.lines.find((l) => l.state === LINE_STATE.RINGING);
       if (line) {
         line.ringsLeft -= 1;
-        if (this.audio) this.audio.play(line.call.ring || 'ring');
+        /* At 0417 the lines ring with nobody behind them, so there is no
+           call to take a ring cadence from. */
+        if (this.audio) this.audio.play((line.call && line.call.ring) || 'ring');
       }
     }
 

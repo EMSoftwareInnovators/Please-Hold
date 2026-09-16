@@ -1,13 +1,18 @@
 # ROADMAP
 
-Status of PLEASE HOLD as of the first vertical slice.
+Status of PLEASE HOLD after the full-night pass.
+
+The game is no longer a vertical slice. It runs 22:45 → 06:00, has an ending,
+and the 1978 call — which used to be where it stopped — is now the end of
+Act I.
 
 ---
 
 ## Implemented and verified
 
 Everything in this section was tested with the harnesses in `tools/` and the
-result was checked, not assumed.
+result was checked, not assumed. **Verified means verified headlessly.** See
+"What has never been done" at the bottom for what that word does not cover.
 
 ### Engine
 - [x] WebGL2 renderer, half-float scene target, 4x MSAA
@@ -19,7 +24,7 @@ result was checked, not assumed.
 - [x] Procedural PBR texture generation — 15 materials, each producing albedo,
       normal (Sobel from a height field) and roughness, all tiling
 - [x] Named material library with a one-call path to replace any recipe with art
-- [x] Static geometry merging (907 meshes → 383 draw calls)
+- [x] Static geometry merging (1081 meshes → 474)
 - [x] Full WebAudio synthesis: no audio files ship
 - [x] A speech synthesizer driven by the text: spelling -> phonemes, three
       sliding formants, fricative turbulence, stop closures and bursts,
@@ -43,22 +48,84 @@ result was checked, not assumed.
 - [x] Room dressing: filing cabinets, day-shift desks, corkboard with readable
       notices, water cooler, coffee maker, boxes, conduit, wall plates, two
       wall clocks with hands the game drives
+- [x] **The building's own equipment** (`world/gear.js`): a breaker panel, a
+      fax machine on its bench, a radio base station, the Records counter with
+      a card index and the day book, a microfilm reader, four light switches,
+      four more telephones, and a 1970s line truck in the lot
+- [x] **Working doors and light switches**, with per-room state that persists
+      across the night and survives a save
 - [x] Exterior: parking lot, chain-link, a three-phase pole line with sagging
       conductors and transformers, sodium yard lights, a treeline, a service truck
 - [x] Storm sky shader, GPU rain volume, rain-on-glass runnel shader
 - [x] Fluorescent simulation: per-fixture health, ballast chatter below 62% mains,
       120 Hz ripple, sick-green colour shift, double-strike lightning envelope
+- [x] **Emergency lighting**, and individual fixtures that can be killed and
+      revived, so a dead building looks like a dead building
 
-### Gameplay
+### The night
+- [x] **A full 22:45 → 06:00 shift** at 8.5 real seconds per game minute —
+      435 game minutes, about 62 real minutes of clock
+- [x] Acts (`game/acts.js`): a beat maps to an act, and an act carries its own
+      pacing, mundane-debt floor and quiet rule
+- [x] **Gaps are silence** — handset down to next ring — with a real lull
+      around three in the morning that nothing jumps out of
+- [x] Authored multi-minute sequences as data (`data/sequences/`): the cascade
+      at the end of Act I, 04:17, the knock at the rear door, dawn, and the
+      backup radio
+- [x] An ending: the storm clears, the day shift arrives, the end-of-shift
+      report counts what the player actually did, and there is one more call
+- [x] 53 call scripts — 573 nodes, 1030 lines, 390 player replies
+
+### Out of the chair
+- [x] **`tasks.js` — eight reasons to get up, every one of them the job**:
+      restore the breakers, write it in the log, pull a service card, collect
+      the fax, raise a crew from the base station, compare the two clocks,
+      make coffee, check the rear door
+- [x] The phone keeps ringing while the player is away, and **story beats do
+      not** — a scripted beat waits for the chair rather than firing into it
+- [x] Power (`game/power.js`): four circuits, a panel at the end of the
+      corridor, and a building that comes back by hand
+- [x] The paper log (`game/paperlog.js`): 16 observations that unlock only when
+      the player has actually witnessed the thing, no free typing, an
+      end-of-shift score — and handwriting in it that is not the player's
+- [x] Records (`game/archive.js`): 8 paper service cards, 2 ledgers and a
+      5-document 1978 incident file, which is where the accounts the CIS has
+      never heard of turn out to exist
+- [x] The fax (`game/fax.js`): mundane traffic most of the night, then a page
+      dated 1978, then a page that arrives before its own timestamp and is
+      right about what happens next
+- [x] Five telephones in four rooms (`game/phones.js`), positioned, muffled
+      through walls, and ringable individually or all at once
+
+### Horror
+- [x] 14 transient events (`game/horror.js`) across three escalation tiers
+- [x] **11 persistent / spatial events** (`game/haunt.js`) that change the room
+      and stay changed until the player puts them back — 7 of the 11 change the
+      3D scene itself
+- [x] The Listener as a presence rather than a monster: reported by a caller,
+      then heard, then a familiar voice that is slightly wrong, then an
+      imitation that fails a question about a person it never met
+- [x] Callers from 1943, 1956, 1978 and 1987, each corroborated by paper the
+      player has to go and find — not by the caller saying what year it is
+- [x] A man who calls three times out of the same eleven minutes and does not
+      know he has called before
+- [x] **04:17**: seeded across the night, arrives on its own, and rings every
+      instrument in the building at once with nothing on the terminal
+- [x] No monster, no chase, no combat, no hiding, and nothing that touches or
+      blocks the player
+
+### Gameplay (from the slice, still true)
 - [x] Main menu, options, how-to, pause, end-of-shift report
-- [x] First-person movement with collision; seated mode at the desk
-- [x] Interaction system with 14 usable objects
-- [x] Telephone: 6 lines, ring cadence, answer, **hold with per-caller patience
-      and consequences**, auto-park, hang up, hold music
+- [x] First-person movement with collision; seated mode at the desk, and a way
+      back out of it
+- [x] Telephone: 6 lines, ring cadence, answer, hold with per-caller patience
+      and consequences, auto-park, hang up, hold music, and a line that rings
+      with nobody behind it
 - [x] Data-driven call format with a validator that runs at boot and in CI
 - [x] Requirement-gated player replies (you cannot confirm what you did not read)
-- [x] Declarative effects: 20 ops covering flags, trust, memory, outages,
-      accounts, scheduling, radio, crews, audio and horror
+- [x] Declarative effects: 29 ops covering flags, trust, memory, outages,
+      accounts, scheduling, radio, crews, audio, horror, faxes, haunts, power,
+      building phones, tasks, observations and sequences
 - [x] Caller memory: trust, what they told you, what you promised, hold time
 - [x] Customer database with search and deliberate corruption
 - [x] Outage tickets with causes, hazards, priority, meter counts and history
@@ -66,27 +133,30 @@ result was checked, not assumed.
 - [x] Crew dispatch with skill matching, ETA and a stated reason per unit
 - [x] Field simulation: crews drive, arrive, work and clear in shift minutes
 - [x] Radio with queued traffic, squelch, per-crew voices and interference
-- [x] CRT terminal: 5 screens (call, tickets+dispatch, accounts, map, log), with
-      caller ID doing the lookup and dispatch folded into the ticket list —
-      a whole call is 7 keypresses and no typing
-- [x] Story scheduler with beat / time / random calls and a mundane-debt rhythm
-- [x] 13 horror events across three escalation tiers
-- [x] Checkpoint save at every story beat
-- [x] **A tutorial that teaches by waiting** — `waitFor` dialogue nodes that
-      hold until the player performs a real action, with an on-screen objective
-- [x] **A terminal that is actually usable** — one state machine, two
-      renderers (a coarse canvas for the CRT in the room, scalable DOM for
-      reading), opaque takeover, locked camera, clickable rows and tabs
-- [x] **A live call docked under the terminal**, with the arrow keys handed
-      between the two panels so neither the caller nor the terminal can be
-      locked out, the panel that has them saying so, and the terminal giving
-      up exactly as much room as the panel needs
-- [x] Written instructions that name the player's actual controls: hints carry
-      `{action}` tokens and are expanded per input family at display time
-- [x] 14 call scripts — 238 nodes, 420 lines, 169 player replies
-- [x] The full slice runs start to finish: 29/29 playthrough assertions pass,
-      22/22 tutorial assertions, 33/33 control assertions, 19/19 pad-only
-      assertions, 21/21 audio-render assertions
+- [x] CRT terminal: 5 screens, caller ID doing the lookup, dispatch folded into
+      the ticket list — a whole call is 7 keypresses and no typing
+- [x] One prop interface (`ui/propui.js`) for the panel, the book, the fax
+      tray, the card index and the incident file, on the keys the terminal
+      already taught
+- [x] Checkpoint save at every story beat, now covering power, doors, tasks,
+      the paper log, the archive, the fax, the phones, the haunts and any
+      sequence in flight
+- [x] A tutorial that teaches by waiting
+- [x] Written instructions that name the player's actual controls
+
+### Test results at the time of writing
+| Harness | Result |
+|---|---|
+| `tools/calls.mjs` | 53 calls, 573 nodes, 1030 lines, 390 choices — all valid |
+| `tools/boot.mjs` | boots clean, no console errors |
+| `tools/soak.mjs` | every script to completion on three reply strategies |
+| `tools/render.mjs` | 21/21 |
+| `tools/tutorial.mjs` | 22/22 |
+| `tools/controls.mjs` | 33/33 |
+| `tools/pad.mjs` | 19/19 |
+| `tools/pacing.mjs` | 9/9 |
+| `tools/playthrough.mjs` | 31/31 |
+| `tools/fullnight.mjs` | 30/30 |
 
 ---
 
@@ -94,57 +164,63 @@ result was checked, not assumed.
 
 | Thing | State |
 |---|---|
-| **The shift does not run to 06:00** | It ends on the 1978 call, which is the intended end of *this* slice. `GameClock` already models the full 22:45→06:00 window and `SHIFT_END` exists. |
-| **Voices** | The formant synthesizer gives every line real timing, prosody and a per-character voice, and every telephone era has its own signal chain. It reads as muffled speech through a handset, not as words. The `clip:` path for real recordings is implemented but no recordings exist. |
-| **Save/continue** | Checkpoints save and load correctly, but a save taken mid-call resumes at the top of the next beat rather than mid-conversation. |
-| **Doors** | Room doors are geometry and are drawn ajar. They do not open. The exit door is correctly locked and solid. |
-| **Crew skills** | Skill matching, "not rated for this" and the follow-up radio call are implemented. Crews never refuse a job, get tired, or go out of service on their own. |
-| **The second clock** | The corridor clock carries the drift and the horror event sets it. Nothing yet forces the player to notice; it rewards a player who checks. |
-| **Options** | All options apply and the panel is now navigable with a d-pad. Bindings are one table in `engine/controls.js`, which is what a rebinding UI would edit; there is no such UI yet, and no stick-sensitivity or invert-Y option for a pad. |
-| **Gamepad** | The whole game is playable on a pad with no keyboard at all, including text entry (`tools/pad.mjs` proves it end to end). What has never happened is a human holding a real controller: dead zones, trigger rest values and the scheme detector are all untested against hardware. |
+| **Voices** | The formant synthesizer gives every line real timing, prosody and a per-character voice, and every telephone era has its own signal chain. It reads as muffled speech through a handset, not as words. The `clip:` path for real recordings is implemented and unused. |
+| **Save/continue** | Checkpoints save and load correctly and now carry the whole building. A save taken mid-call still resumes at the top of the next beat rather than mid-conversation. |
+| **Crew skills** | Skill matching, "not rated for this", the follow-up radio call, and one crew who refuses a job late in the night. Crews still do not get tired or go out of service on their own, and cannot be hurt. |
+| **Options** | All options apply and the panel is navigable with a d-pad. Bindings are one table in `engine/controls.js`, which is what a rebinding UI would edit; there is no such UI, and no stick-sensitivity or invert-Y. `subtitles` is a setting with no UI row. |
+| **Gamepad** | Playable end to end with no keyboard (`tools/pad.mjs` proves it). No human has held a real controller. |
+| **Microfilm reader** | It exists in Records, it is dressed, and the card index and ledgers carry the documents. The reader itself is scenery — the paper path answers every question the game asks. |
+| **The Final Rental easter egg** | One service card in the index (TRIPLE FEATURE VIDEO, 112 Commerce St, with a margin note). It rewards reading; it does nothing else. |
 
 ---
 
 ## Known problems
 
-1. **Performance still needs confirming on real hardware.** The first build ran
-   at seconds per frame on an M1 MacBook Air. The causes were found and fixed
-   — 37 real-time lights cut to 7-11, static lighting baked to vertices,
-   Retina 2x rendering turned off by default, MSAA made a preset, and an
-   adaptive resolution scaler added — but every measurement here is still
-   SwiftShader in a container. The structural numbers (lights, draw calls,
-   triangles) are sound; the frame rate is not measurable from here. `F3`
-   in game and `node tools/perf.mjs` report the real ones.
-2. **Draw calls are ~101 from the desk, ~383 in the scene.** Props are not
-   merged (they carry interaction and animation). Instancing the day-shift
-   desks and the ceiling grid would help if it is still needed.
+1. **Performance still needs confirming on real hardware.** The structural
+   fixes are in — 37 real-time lights cut to 7-11, static lighting baked to
+   vertices, Retina 2x off by default, MSAA behind a preset, an adaptive
+   resolution scaler — but every measurement here is SwiftShader in a
+   container, where the game runs at single-digit frames per second at
+   1280x720 regardless of preset. The structural numbers (lights, draw calls,
+   triangles) are sound; the frame rate is not measurable from here. `F3` in game and `node tools/perf.mjs` report the real ones.
+2. **Merging takes the scene from 1081 meshes to 474.** The building added
+   props, and props are not merged because they carry interaction and
+   animation. Instancing the day-shift desks and the ceiling
+   grid would help if it is still needed.
 3. **The baked light cannot move.** A single fixture going dark leaves its
    baked pool on the floor. Fixtures near the player hold a real pooled light
    and flicker correctly, so this is only visible across the room during a
-   brownout.
-4. **No audio device in CI.** The mix is now rendered offline to real WAVs and
-   measured properly (`tools/render.mjs`: envelope variation, crest factor,
-   onsets per second, band split), and those files can be listened to outside
-   the container — but nothing in the loop that writes the code can hear them.
-   Both audio bugs so far passed the numeric checks that existed at the time.
-5. The **`_updateStanding` method on `Player`** is vestigial — standing works,
-   but it eases through `update()` rather than that method.
+   brownout — and the emergency-lighting state hides most of it.
+4. **No audio device in CI.** The mix is rendered offline to real WAVs and
+   measured properly, and those files can be listened to outside the container
+   — but nothing in the loop that writes the code can hear them. Both audio
+   bugs so far passed the numeric checks that existed at the time.
+5. The **`_updateStanding` method on `Player`** is vestigial.
 6. The **horror `degrade` and `tunnel` events restore the grade with a
    `requestAnimationFrame` loop** that does not stop if the event is re-fired
-   mid-restore. Harmless today; will misbehave if two grade events overlap.
+   mid-restore.
 7. **The tube canvas and the DOM view are two renderers of one description.**
-   They cannot disagree about content, but they can about layout — a row kind
-   added to one and not styled in the other will render, plainly, in both.
-8. **No controller has actually been held.** `tools/controls.mjs` drives the
-   pad path with the same synthetic button events `input.js` produces, so the
-   routing, the button art and the menus are covered — but there is no gamepad
-   in CI, and nothing here has confirmed a real stick's dead zone, a trigger's
-   resting value, or that a DualSense reports the id the scheme detector
-   expects.
-9. **Nothing in the building makes the player stand up.** The whole slice can
-   be finished without leaving the chair, which caps how much the corridor,
-   the records room and the rest of the office can ever be worth. See
-   "The building at night" below for the design note.
+   They cannot disagree about content, but they can about layout.
+8. **No controller has actually been held.**
+9. **Game time in a harness runs at about a sixth of wall time** (dt is clamped
+   to 0.05s, SwiftShader draws ~3 fps). Every harness that waits on game
+   seconds has to compress them explicitly. This is documented at the top of
+   `tools/fullnight.mjs` and it has bitten three harnesses so far.
+
+---
+
+## What has never been done
+
+This is the honest list, and it is the reason nothing above says "shipped".
+
+* **Nobody has played the full night.** `tools/fullnight.mjs` drives all of it
+  and asserts 30 things about the result, including that every act happens,
+  every sequence completes, 4:17 rings every instrument, and the shift ends
+  properly. That is not the same as a person sitting through the lull at three
+  in the morning and finding out whether it is boring or whether it works.
+* **Nobody has heard it.** See Known problems 4.
+* **Nobody has held a pad.** See Known problems 8.
+* **Nobody has measured a frame.** See Known problems 1.
 
 ---
 
@@ -155,8 +231,8 @@ Everything generated, nothing shipped as a file:
 | | Where | Replace by |
 |---|---|---|
 | All 15 surface materials | `src/engine/textures.js` | `IMAGE_OVERRIDES` in `materials.js` |
-| Wall map, notices, EXIT sign, drawer labels, binder spines, clock face, equipment plates | `src/world/signage.js` | return an `<img>` instead of a `<canvas>` |
-| All props | `src/world/props.js`, `workstation.js` | replace the builder body, keep the `userData` contract |
+| Wall map, notices, EXIT sign, drawer labels, binder spines, clock face, equipment plates, service cards, fax pages | `src/world/signage.js` | return an `<img>` instead of a `<canvas>` |
+| All props | `src/world/props.js`, `workstation.js`, `gear.js` | replace the builder body, keep the `userData` contract |
 | All voices | formant synthesis in `src/engine/audio.js` | `clip:` on a line + `audio.registerClip()` |
 | All sound effects | `AudioEngine.play()` | same |
 | Favicon | generated PNG at repo root | any 32×32 |
@@ -165,140 +241,79 @@ Everything generated, nothing shipped as a file:
 
 ## Next milestone — recommended order
 
-### 1. Finish the night (highest value)
-The slice ends at beat 10. Extend to a full 22:45→06:00 shift:
-* 8–12 more ordinary calls so the random pool does not run dry (the director
-  already has a time-decay fallback for this, but more traffic is the real fix)
-* a second and third recurring caller with the Daley treatment
-* a mid-shift lull that is genuinely quiet, because the game has not had one
-* an ending that resolves the shift rather than cutting to the title
+The night exists. What it needs now is confirmation and depth, in that order.
 
-### 2. Make the two clocks matter
-The mechanism is built. Give the player a reason to compare them: a call that
-asks the time, a work order that will not accept a stamp, Keefe asking what
-yours says.
+### 1. Play it (highest value, and it is not code)
+Sit down and work the whole shift on real hardware with sound. Everything
+below is a guess until that has happened once. Specifically worth watching:
 
-### 3. Callers from more eras
-`caller.era` exists and the audio chain supports 1956, 1978 and 1999 already.
-The design calls for it to become *very apparent* that calls arrive from
-different periods. Add 1943 and 1987 line treatments and two more decades of
-caller.
+* is the lull restful or is it dead time?
+* does the nine seconds of silence after the cascade read as "the game has
+  ended", which is what it is for?
+* does 4:17 last long enough to be a decision and short enough to be a scene?
+* do the ordinary calls carry an hour, or do they start repeating?
+* at 8.5 real seconds per game minute, is 62 minutes the right length?
 
-### 4. Real voice recordings
-The pipeline is finished and unused. Recording even the 30 lines of
-`keefe_1978` would transform the ending. Start there, not at the beginning.
+The clock rate is one number in `src/game/clock.js` and the act gaps are one
+table in `src/game/acts.js`. Both are meant to be tuned by someone who has
+played it.
 
-### 5. Terminal depth
-* an account-history screen (the microfilm cartons in Records are a promise)
-* the ability to *edit* a record, so the player can watch their own edit change
-* the CALL screen should show a returning caller's previous tickets inline —
-  Mrs. Daley calling back is the obvious case, and it is one query
+### 2. Real voice recordings
+The pipeline is finished and unused. Recording `keefe_1978`, `last_call` and
+the three `mercer` calls — about 60 lines — would do more for this game than
+any other single piece of work. `clip:` on a line already plays one, so this
+is a content problem, not a code problem.
 
-### 6. The building at night — and getting the player out of the chair
+### 3. Confirm performance on a GPU
+Run `F3` at each preset on real hardware, confirm the adaptive scaler settles
+where it should, and profile the rain and wet-glass shaders, which are the
+most expensive per-pixel work in the game and have never been measured on a
+GPU. The building added props and draw calls; that number wants a second look.
 
-**Not implemented. This is the design note for it.**
+### 4. A real controller
+Dead zones, trigger rest values, and whether a DualSense reports an id the
+scheme detector recognises. Then stick sensitivity, dead zone and invert-Y in
+Options, and a rebinding UI over the `ACTIONS` table — the data is already
+shaped for it.
 
-The desk is safe. It has a task, a screen, and a phone that tells you what to
-do next. That is exactly why the horror needs the player *out* of it: the
-corridor is only frightening if leaving the desk costs something, and right
-now nothing ever asks them to. A player can finish the whole slice without
-standing up once.
+### 5. Consequences that outlive the night
+The end-of-shift report counts the paper log, the tickets, the promises kept
+and the callers who hung up. Nothing reads it afterwards. The obvious next
+structure is a second shift that knows what happened on the first: a caller
+who remembers being put on hold for nine minutes, a crew that will not take
+your word, a supervisor who has read your log.
 
-The rule that should govern all of this: **the reason to get up must come from
-the job, and the cost of getting up must be the phone.** Never a locked door
-that opens when a timer says so, never "go and look at the spooky thing". The
-player should stand up because a caller needs something that is not at the
-desk, and should feel the line ringing behind them the whole way.
+### 6. Terminal and Records depth
+* an account-history screen, so the CIS can be *wrong* in a way the paper
+  corrects
+* the ability to edit a record, so the player can watch their own edit change
+* the microfilm reader as a real screen rather than dressing
+* the CALL screen showing a returning caller's previous tickets inline
 
-Ranked by how much they earn:
+### 7. More of the night's own content
+The structure has room that the content does not yet fill:
+* more ordinary traffic for the back half — Act II leans on the same pool
+* a fourth era, if it can be corroborated as carefully as 1943 was
+* crews that tire, go out of service, or get hurt
+* more than one ending, or one that branches on the paper log
 
-1. **The log book, not the log screen.** The supervisor's line in the handover
-   is already "write it down". Put a paper log on the far counter — the one
-   the day shift actually uses — and make certain things only recordable
-   there: the anomalies. The terminal's LOG screen holds what the terminal
-   believes; the paper holds what the player saw. When those two disagree
-   later, the player walked across the room to create the evidence, which is
-   worth far more than being shown it. Cost: the phone can ring while you are
-   at the counter, and you have to decide whether to finish the sentence.
-
-2. **The breaker panel / the fuse cabinet.** A brownout drops the terminal or
-   the lights, and it comes back by hand. This is the most natural "you must
-   leave the desk NOW, with a call live" pressure in the building, and the
-   horror events already simulate the failure — they just currently fix
-   themselves. Put a held caller on the line first and it is a real trade.
-
-3. **Records: the microfilm cartons.** An account older than the CIS (the 1961
-   service date on Daley's record is a hook already in the data) has nothing
-   on the terminal. To answer a question about it the player has to go and
-   open a drawer. This is where a 1956 account SHOULD be findable on paper —
-   and where the paper can say something the terminal does not. Best possible
-   home for a document the player finds rather than is told.
-
-4. **The radio base station, if it stops answering the desk mic.** A crew that
-   can only be raised from the set on the far wall gets the player up with
-   their back to the phone, listening to somebody describe what they are
-   looking at. The radio already has per-crew voices and a queue.
-
-5. **Coffee, cigarettes, the thermostat, the window.** The mundane one, and do
-   not skip it. Gloria already mentions the thermostat lying. A player who
-   gets up for nothing at all — because it is 3am and they are bored — is a
-   player who has decided the room is safe, which is the state you want them
-   in immediately before it is not. This wants no mechanics: just a reason to
-   be standing in the wrong place at the wrong time.
-
-What the horror gets in return, once any of those exist:
-* the desk can be occupied while the player is away from it (the chair turned,
-  the terminal on a screen they did not leave it on, a ticket they did not
-  write, the handset off the hook)
-* the phone ringing becomes a sound you walk *toward*, which is a different
-  emotion from a sound you answer
-* the corridor stops being scenery
-* and the 1978 dispatcher at the end lands harder if the player has spent the
-  night learning that this room does things when nobody is sitting in it
-
-Supporting work this needs, in order: working doors (the records room wants to
-be lockable), a light switch so darkness can be the player's own fault, and
-carryable/readable paper as an interaction kind. A second floor or the
-basement the conduit implies is the biggest version of this and the least
-necessary.
-
-**One constraint worth writing down now:** if the player is away from the desk
-when a story beat is due, the beat must WAIT, not fire into an empty chair.
-The director already holds calls for a hold-grace period; leaving the desk
-should extend the same courtesy, or the game will punish the exploration it
-just asked for.
-
-### 7. The voices, one more pass
-The synthesizer has consonants and transitions now, which is the difference
-between beeps and speech, but it is still not a person. The next gains are:
-* coarticulation — a vowel's targets should be pulled toward its neighbours
+### 8. The voices, one more pass (if recordings do not happen)
+* coarticulation — a vowel's targets pulled toward its neighbours
 * a proper glottal pulse shape (LF model) instead of a filtered sawtooth
 * per-character prosody: Merrick interrupts, Daley trails off, Ott takes his
   time. The data is already per-character; the contour is not
-* and the real answer is still item 4: recordings. `clip:` on a line already
-  plays one, so that is a content problem, not a code problem
 
-### 8. Controls polish
-* a rebinding UI over the `ACTIONS` table (the data is already shaped for it)
-* stick sensitivity, dead zone and invert-Y in Options
-* test on a real controller: dead zones, trigger rest values, and whether a
-  DualSense reports an id the scheme detector recognises
-
-### 9. Confirm the performance work on a GPU
-The structural fixes are in (see Known problems 1). What remains is measurement:
-run `F3` on real hardware at each preset, confirm the adaptive scaler settles
-where it should, and profile the rain and wet-glass shaders, which are the
-most expensive per-pixel work left and have never been measured on a GPU.
+### 9. Art
+Everything is procedural and every path to replace it exists. Start with the
+signage — the wall map, the service cards and the fax pages are read closely
+by the player and are the cheapest thing to upgrade.
 
 ---
 
 ## Larger features from the design bible not yet started
 
 * Multiple shifts / a campaign structure
-* Supervisor calls and a chain of command
 * The player character having a life outside the desk
-* Consequences that carry between nights
-* Any ending other than the slice cut
-* Crews that can be hurt
 * A written work-order system the player fills in by hand
 * Weather that changes over the night
+* A second floor, or the basement the conduit implies

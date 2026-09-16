@@ -77,6 +77,15 @@ export class CustomerDatabase {
     return Object.values(STREETS).some((ls) => ls.some((s) => a.startsWith(norm(s))));
   }
 
+  /** A record stops existing. Dawn takes back what the night put in. */
+  remove(id) {
+    const key = norm(id);
+    if (!this.records.has(key)) return false;
+    this.records.delete(key);
+    this.lookups.delete(key);
+    return true;
+  }
+
   add(record) {
     if (!record || !record.id) return null;
     const r = { ...record, id: norm(record.id) };

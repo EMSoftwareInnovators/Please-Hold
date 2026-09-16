@@ -257,6 +257,112 @@ await page.evaluate(() => {
 await settle(600);
 await shot('19-records');
 
+// ---- the building, and the things in it that are not the CRT ----
+
+// the day book on the Records counter, with something worth writing in it
+await page.evaluate(() => {
+  const g = window.__game;
+  for (const f of ['pratt1956', 'keefe_said_1956', 'saw_clock_drift', 'saw_chair_moved',
+                   'evpWarning', 'gaines_confirmed']) g.gameState.set(f, true);
+  g.paperlog.record('obs_1956');
+  g.paperlog.record('obs_keefe');
+  g.player.pos.set(-3.85, 1.68, 3.05);
+  g.player.yaw = Math.PI; g.player.pitch = -0.35;
+  g.openPaperLog();
+});
+await settle(700);
+await shot('21-paperlog');
+
+// the card index, and the card for a man who is currently on the telephone
+await page.evaluate(() => {
+  const g = window.__game;
+  g.propUI.close();
+  g.gameState.set('met_gaines', true);
+  g.player.pos.set(-4.9, 1.68, 3.05);
+  g.player.yaw = Math.PI; g.player.pitch = -0.3;
+  g.openCardIndex();
+  g.propUI.open.onPick({ id: 'F-K' });
+  const row = g.propUI.items().find((r) => /GAINES/i.test(r.text));
+  if (row) g.propUI.open.onPick(row);
+});
+await settle(700);
+await shot('22-card-index');
+
+// the breaker panel, with the building down
+await page.evaluate(() => {
+  const g = window.__game;
+  g.propUI.close();
+  g.phone.hangUpAll();
+  g.power.trip(['lights', 'terminal'], { reason: 'shot', emergency: true });
+  // snap them shut: the leaves ease over game seconds and this harness only
+  // gets a handful of frames per screenshot
+  for (const d of ['records', 'breakroom']) {
+    g.doors.set(d, false, { silent: true });
+    const l = g.doors.get(d);
+    if (l) { l.pivot.rotation.y = l.closedYaw; l.open = false; }
+  }
+  g.player.pos.set(-1.9, 1.68, 6.5);
+  g.player.yaw = Math.PI / 2; g.player.pitch = -0.02;
+});
+await settle(1200);
+await shot('23-corridor-emergency');
+
+await page.evaluate(() => {
+  const g = window.__game;
+  g.player.pos.set(-5.3, 1.68, 6.45);
+  g.player.yaw = Math.PI / 2; g.player.pitch = -0.02;
+  g.openBreakers();
+});
+await settle(700);
+await shot('24-breakers');
+
+// the fax, and a page that should not exist
+await page.evaluate(() => {
+  const g = window.__game;
+  g.propUI.close();
+  g.power.resetAll();
+  g.lighting.setPower(1, true);
+  g.terminal.setPower(true);
+  const page = g.faxLibrary.find((f) => f.id === 'fax_1978');
+  g.fax._print(page);
+  g.player.pos.set(1.62, 1.68, 6.35);
+  g.player.yaw = Math.PI; g.player.pitch = -0.48;
+});
+await settle(1400);
+await shot('25-fax');
+
+// the tray, and then the page itself
+await page.evaluate(() => window.__game.openFax());
+await settle(600);
+await page.evaluate(() => window.__game.propUI.pick());
+await settle(700);
+await shot('26-fax-1978');
+
+// 04:17, every instrument in the building at once, and nothing on the desk
+await page.evaluate(() => {
+  const g = window.__game;
+  g.propUI.close();
+  g.phone.hangUpAll();
+  g.power.trip(['lights'], { reason: 'shot', emergency: true });
+  g.phones.ringAll();
+  g.phone.ringAllLines();
+  g.player.pos.set(-1.2, 1.68, 6.5);
+  g.player.yaw = 1.57; g.player.pitch = 0;
+});
+// 28*60+17 is 0417 the NEXT morning, which is what the date line reads from,
+// and set() is what tells the HUD -- assigning .minutes does not
+await page.evaluate(() => { window.__game.clock.set(28 * 60 + 17); });
+await settle(1600);
+await shot('27-four-seventeen');
+
+await page.evaluate(() => {
+  const g = window.__game;
+  g.phones.silenceAll();
+  g.phone.hangUpAll();
+  g.power.resetAll();
+});
+await settle(600);
+
 // the end slate
 await page.evaluate(() => { window.__game.menu.slate('PLEASE HOLD', { hold: 100 }); });
 await settle(1800);

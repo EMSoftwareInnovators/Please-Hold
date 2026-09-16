@@ -20,6 +20,11 @@ import {
   exitSignProp, conduitRun, wallPlate,
 } from './props.js';
 import { notice } from './signage.js';
+import {
+  faxMachine, breakerPanel, baseStation, logBook, cardIndex, oldLineTruck, lightSwitch,
+} from './gear.js';
+import { CIRCUITS } from '../game/power.js';
+import { INSTRUMENTS, buildInstrument } from '../game/phones.js';
 
 /** Mark an object as usable and record it. */
 function usable(list, obj, spec) {
@@ -361,6 +366,10 @@ export function dressBuilding(scene, mats, office) {
 
   /* ============================================================
      RECORDS
+
+     The room the player comes to when the terminal says NO
+     RECORDS MATCH and a caller is still on the line waiting to
+     be told whether they exist.
      ============================================================ */
   for (let i = 0; i < 3; i++) {
     const s = shelfUnit(mats);
@@ -376,6 +385,7 @@ export function dressBuilding(scene, mats, office) {
     root.add(fc);
     solids.addObject(fc, 'cabinet');
     if (i === 0) usable(interactables, fc, { id: 'files_records', label: 'OUTAGE HISTORY', verb: 'Open', range: 1.5 });
+    if (i === 1) out.recordsDrawer = fc.getObjectByName('drawer2') || fc;
   }
   {
     const cb = cardboardBox(mats, { label: 'MICROFILM 1956-62', h: 0.30 });
@@ -383,6 +393,220 @@ export function dressBuilding(scene, mats, office) {
     cb.rotation.y = -0.4;
     root.add(cb);
     usable(interactables, cb, { id: 'microfilm_box', label: 'MICROFILM CARTONS', verb: 'Examine', range: 1.4 });
+  }
+
+  // --- the Records counter: the card index, the day book, the extension ---
+  {
+    const counter = new THREE.Group();
+    counter.add(box(2.2, 0.06, 0.62, mats.get('deskLaminate'), { pos: [0, 0.92, 0] }));
+    for (const x of [-1.0, 1.0]) {
+      counter.add(box(0.06, 0.92, 0.58, mats.get('paintedSteel'), { pos: [x, 0.46, 0] }));
+    }
+    counter.position.set(-4.3, 0, 2.3);
+    root.add(counter);
+    solids.addObject(counter, 'counter');
+    out.recordsCounter = counter;
+
+    const index = cardIndex(mats);
+    index.position.set(-5.0, 0.95, 2.35);
+    index.rotation.y = 0.12;
+    root.add(index);
+    usable(interactables, index, {
+      id: 'card_index', label: 'SERVICE CARD INDEX', verb: 'Search', range: 1.6,
+    });
+    out.cardIndex = index;
+
+    const book = logBook(mats);
+    book.position.set(-3.85, 0.95, 2.30);
+    book.rotation.y = -0.22;
+    root.add(book);
+    usable(interactables, book, {
+      id: 'paperlog', label: 'THE DAY BOOK', verb: 'Write in', range: 1.5,
+    });
+    out.logBook = book;
+
+    /* The microfilm reader. The cartons have been in here for years and the
+       reader has been broken since the spring -- which is exactly why the
+       card index matters, and why the player is not going to be handed a
+       convenient projection of 1943. */
+    const reader = box(0.5, 0.42, 0.44, mats.get('beigePlastic'), { pos: [-3.2, 1.16, 2.3] });
+    reader.rotation.y = -0.3;
+    root.add(reader);
+    usable(interactables, reader, {
+      id: 'microfilm_reader', label: 'MICROFILM READER', verb: 'Try', range: 1.5,
+    });
+  }
+
+  /* ============================================================
+     THE BUILDING'S OTHER TELEPHONES
+
+     Silent for five hours. That is their job.
+     ============================================================ */
+  for (const inst of INSTRUMENTS) {
+    if (inst.id === 'dispatch') continue;          // the console is workstation.js
+    const wall = inst.pos.y > 1.1;
+    const t = buildInstrument(mats, { wall });
+    t.position.set(inst.pos.x, inst.pos.y, inst.pos.z);
+    t.rotation.y = inst.room === 'records' ? -1.2 : inst.room === 'breakroom' ? 0.2 : 1.4;
+    root.add(t);
+    usable(interactables, t, {
+      id: `phone:${inst.id}`, label: inst.label, verb: 'Answer', range: 1.7,
+    });
+    out[`phone_${inst.id}`] = t;
+  }
+
+  /* ============================================================
+     THE SUPERVISOR'S DESK
+
+     In the corner of the ops room, because this building does not
+     have an office for her. It has a desk with her name on it and
+     a telephone that has never rung at night.
+     ============================================================ */
+  {
+    const sd = box(1.5, 0.05, 0.75, mats.get('deskLaminate'), { pos: [8.7, 0.74, 6.6] });
+    root.add(sd);
+    const ped = box(0.42, 0.72, 0.6, mats.get('paintedSteel'), { pos: [8.15, 0.36, 6.6] });
+    root.add(ped);
+    solids.addObject(sd, 'desk');
+    const sup = paperStack(mats, 9);
+    sup.position.set(9.05, 0.78, 6.75);
+    root.add(sup);
+    const ch = officeChair(mats, { fabric: 'chairFabric' });
+    ch.position.set(8.6, 0, 7.5);
+    ch.rotation.y = 0.4;
+    root.add(ch);
+  }
+
+  /* ============================================================
+     THE FAX
+
+     Back counter, dispatch room. Far enough that collecting a page
+     is standing up and walking; near enough that the player hears
+     every one of them start.
+     ============================================================ */
+  {
+    const bench = box(1.6, 0.05, 0.6, mats.get('deskLaminate'), { pos: [1.5, 0.92, 7.55] });
+    root.add(bench);
+    for (const x of [0.8, 2.2]) {
+      root.add(box(0.06, 0.92, 0.56, mats.get('paintedSteel'), { pos: [x, 0.46, 7.55] }));
+    }
+    solids.addObject(bench, 'counter');
+
+    const fax = faxMachine(mats);
+    fax.position.set(1.5, 0.95, 7.5);
+    fax.rotation.y = Math.PI;
+    root.add(fax);
+    usable(interactables, fax, {
+      id: 'fax', label: 'FAX MACHINE', verb: 'Collect from', range: 1.6,
+    });
+    out.fax = fax;
+  }
+
+  /* ============================================================
+     THE CORRIDOR: THE PANEL AND THE BACKUP SET
+
+     Both at the far end, past the records door, where the desk
+     telephone is a sound coming from behind you.
+     ============================================================ */
+  {
+    const panel = breakerPanel(mats, CIRCUITS);
+    panel.position.set(-6.85, 1.45, 6.1);
+    panel.rotation.y = Math.PI / 2;
+    root.add(panel);
+    usable(interactables, panel, {
+      id: 'breakers', label: 'PANEL A — LIGHTING & POWER', verb: 'Open', range: 1.7,
+    });
+    out.breakerPanel = panel;
+
+    const shelf = box(0.9, 0.05, 0.42, mats.get('paintedSteel'), { pos: [-6.6, 1.05, 6.9] });
+    root.add(shelf);
+    const set = baseStation(mats);
+    set.position.set(-6.6, 1.07, 6.9);
+    set.rotation.y = 1.3;
+    root.add(set);
+    usable(interactables, set, {
+      id: 'base_station', label: 'BACKUP BASE SET', verb: 'Key up', range: 1.7,
+    });
+    out.baseStation = set;
+  }
+
+  /* ============================================================
+     LIGHT SWITCHES
+
+     One per room, by the door, where a hand goes. Darkness the
+     player caused is worth more than darkness the game caused.
+     ============================================================ */
+  for (const [room, pos, yaw] of [
+    ['dispatch', [0.22, 1.25, 6.55], Math.PI / 2],
+    ['corridor', [-0.24, 1.25, 6.9], -Math.PI / 2],
+    ['records', [-2.2, 1.25, 5.42], 0],
+    ['breakroom', [-2.3, 1.25, 7.62], Math.PI],
+  ]) {
+    const sw = lightSwitch(mats);
+    sw.position.set(pos[0], pos[1], pos[2]);
+    sw.rotation.y = yaw;
+    root.add(sw);
+    usable(interactables, sw, {
+      id: `switch:${room}`, label: 'LIGHT SWITCH', verb: 'Flip', range: 1.4,
+    });
+    out[`switch_${room}`] = sw;
+  }
+
+  /* ============================================================
+     THE LOT
+
+     A truck that is not ours, parked where it cannot be, visible
+     for exactly two lightning flashes. See haunt.js.
+     ============================================================ */
+  {
+    const truck = oldLineTruck(mats);
+    truck.position.set(19.5, 0, 9.5);
+    truck.rotation.y = -0.5;
+    scene.add(truck);
+    out.oldTruck = truck;
+  }
+
+  /* ============================================================
+     RECORDS, IN 1978
+
+     The same room with different furniture in it. Built once and
+     hidden; haunt.js swaps the two groups for as long as the
+     player is standing in the wrong decade.
+     ============================================================ */
+  {
+    const era = new THREE.Group();
+    era.name = 'records1978';
+    era.visible = false;
+    // green steel desks instead of the laminate counter, a typewriter, and
+    // the wall of ledgers that got thrown out when the CIS went in.
+    const d78 = box(1.6, 0.05, 0.8, mats.get('paintedSteel'), { pos: [-4.3, 0.74, 2.5] });
+    era.add(d78);
+    era.add(box(0.42, 0.72, 0.7, mats.get('paintedSteel'), { pos: [-4.9, 0.36, 2.5] }));
+    const typer = box(0.36, 0.22, 0.34, mats.get('greyMetal'), { pos: [-4.3, 0.87, 2.5] });
+    era.add(typer);
+    era.add(box(0.30, 0.02, 0.24, mats.get('paper'), { pos: [-4.3, 1.0, 2.62] }));
+    for (let i = 0; i < 4; i++) {
+      const led = box(0.34, 0.07, 0.26, mats.get('woodTrim'), { pos: [-5.5, 1.62 + i * 0.09, 3.2] });
+      led.rotation.y = 0.1;
+      era.add(led);
+    }
+    const chair78 = officeChair(mats, { fabric: 'chairFabric' });
+    chair78.position.set(-4.3, 0, 3.4);
+    chair78.rotation.y = 2.9;                 // turned away. somebody is in it.
+    era.add(chair78);
+    root.add(era);
+    out.records1978 = era;
+
+    /* Swapping decades: the 1999 dressing goes away, the 1978 dressing comes
+       back, and the room is the same room. Deliberately a hard cut -- a
+       cross-fade would look like an effect, and this has to look like a fact. */
+    out.recordsEra = (year) => {
+      const now99 = year !== 1978;
+      era.visible = !now99;
+      for (const o of [out.recordsCounter, out.cardIndex, out.logBook]) {
+        if (o) o.visible = now99;
+      }
+    };
   }
 
   return out;

@@ -263,6 +263,74 @@ export class Lighting {
   /** Make every fixture in the building stutter at once. */
   stutterAll(now, dur = 1.4) { for (const f of this.fixtures) f.stutter(now, dur); }
 
+  /* ============================================================
+     EMERGENCY LIGHTING, AND FIXTURES THAT GO OUT ONE AT A TIME
+
+     Two things the vertical slice never needed. A building whose
+     main lighting circuit is off is not a black screen: it is a
+     pair of battery heads over the doors, throwing a hard cold
+     light down two walls and leaving everything else to the
+     storm. And a fixture that dies on its own stays dead, which
+     is how the corridor can empty out behind somebody.
+     ============================================================ */
+
+  /** Battery heads on the exit signs. Cold, directional, and not enough. */
+  setEmergency(on) {
+    if (on === this._emergencyOn) return;
+    this._emergencyOn = on;
+    if (!this._emergency) {
+      this._emergency = [];
+      for (const [x, y, z] of [[0.6, 2.55, 6.6], [-6.4, 2.45, 6.5], [-2.4, 2.55, 5.2]]) {
+        const l = new THREE.SpotLight(0xdff0ff, 0, 9, 1.05, 0.7, 1.4);
+        l.position.set(x, y, z);
+        l.target.position.set(x, 0, z + 0.6);
+        this.scene.add(l);
+        this.scene.add(l.target);
+        this._emergency.push(l);
+      }
+    }
+    for (const l of this._emergency) l.intensity = on ? 3.4 : 0;
+  }
+
+  /** Put one fixture out and leave it out. */
+  killFixture(f) {
+    if (!f || f.out) return false;
+    f.out = true;
+    f.k = 0;
+    f.diffuser.material.emissiveIntensity = 0.02;
+    return true;
+  }
+
+  reviveFixture(f) {
+    if (!f || !f.out) return false;
+    f.out = false;
+    return true;
+  }
+
+  /**
+   * A room's own light switch. Fixtures are placed by the office builder, so
+   * "which room" is a rectangle test -- the same rectangles the floor plan
+   * uses, which is the only sane source of truth for this.
+   */
+  setRoomLights(room, on) {
+    const R = {
+      dispatch: [0, 0, 10, 8],
+      corridor: [-7, 5.5, 0, 7.5],
+      breakroom: [-6, 7.5, -2, 11],
+      records: [-6, 1.8, -2, 5.5],
+    }[room];
+    if (!R) return false;
+    let n = 0;
+    for (const f of this.fixtures) {
+      const { x, z } = f.pos;
+      if (x < R[0] || x > R[2] || z < R[1] || z > R[3]) continue;
+      f.switchedOff = !on;
+      if (!on) this.killFixture(f); else this.reviveFixture(f);
+      n++;
+    }
+    return n > 0;
+  }
+
   /** Fire a lightning flash immediately. */
   strike(now, strength = 1) {
     this._lightning.t = now;

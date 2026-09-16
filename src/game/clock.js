@@ -20,7 +20,13 @@ export const SHIFT_END = 30 * 60;             // 06:00 next day
 export class GameClock {
   constructor(opts = {}) {
     this.minutes = opts.start ?? SHIFT_START;
-    this.secondsPerMinute = opts.secondsPerMinute ?? 2.2;
+    /* 8.5 real seconds per shift minute. The shift is 22:45 -> 06:00, which
+       is 435 minutes, which is a little over an hour of real time -- and the
+       night now has enough calls, dispatch work, walking, paperwork and
+       quiet in it to fill that honestly rather than by making the player
+       wait. The vertical slice ran at 2.2 and finished in twenty minutes;
+       at this rate the same content would be a third of a night. */
+    this.secondsPerMinute = opts.secondsPerMinute ?? 8.5;
     this.running = false;
     this.scale = 1;                  // horror director's time-dilation dial
     this._acc = 0;
@@ -54,6 +60,11 @@ export class GameClock {
   get wallMinutes() { return ((Math.floor(this.minutes) % 1440) + 1440) % 1440; }
   /** What the CLOCKS ON THE WALL say, which is not always the same thing. */
   get displayMinutes() { return ((Math.floor(this.minutes + this.displayOffset) % 1440) + 1440) % 1440; }
+
+  /** The date, which is 11 November 1999 until it is the 12th. */
+  dateLabel() {
+    return this.minutes >= 24 * 60 ? '12 NOV 1999' : '11 NOV 1999';
+  }
 
   label(minutes = this.wallMinutes) {
     const m = ((Math.floor(minutes) % 1440) + 1440) % 1440;

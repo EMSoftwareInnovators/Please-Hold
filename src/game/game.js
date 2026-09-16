@@ -48,6 +48,21 @@ import { Player } from './player.js';
 import { InteractionSystem } from './interaction.js';
 
 import { Terminal, SCREENS, TABS } from '../ui/terminal.js';
+import { PropUI } from '../ui/propui.js';
+import { PowerSystem, CIRCUITS } from './power.js';
+import { PaperLog } from './paperlog.js';
+import { FaxMachine } from './fax.js';
+import { Archive } from './archive.js';
+import { HauntDirector, roomAt } from './haunt.js';
+import { SequenceRunner } from './sequences.js';
+import { BuildingPhones } from './phones.js';
+import { TaskSystem } from './tasks.js';
+import { Doors } from './doors.js';
+import { BEAT, CLOCK as TIMETABLE, actFor } from './acts.js';
+import { FAXES, faxById } from '../data/faxes.js';
+import { SERVICE_CARDS, LEDGERS, INCIDENTS } from '../data/archive.js';
+import { SEQUENCES } from '../data/sequences/index.js';
+import { setFaxState, setBreakerState, setLogPage, setSwitchState } from '../world/gear.js';
 import { TerminalView } from '../ui/terminalview.js';
 import { HUD } from '../ui/hud.js';
 import { CallUI } from '../ui/callui.js';
@@ -218,14 +233,51 @@ export class Game {
       world: this.world,
     });
 
+    /* ============================================================
+       THE BUILDING
+
+       Everything below this line exists so that the telephone is
+       not the only thing in the game. They are separate systems
+       on purpose: the orchestrator wires them together and owns
+       none of their behaviour.
+       ============================================================ */
+    this.power = new PowerSystem({
+      lighting: this.lighting, terminal: this.terminal, audio: this.audio,
+      state: this.gameState, clock: this.clock, world: this.world,
+    });
+    this.doors = new Doors({
+      office: this.office, audio: this.audio, state: this.gameState, lighting: this.lighting,
+    });
+    this.paperlog = new PaperLog({ state: this.gameState, clock: this.clock, audio: this.audio });
+    this.fax = new FaxMachine({ audio: this.audio, state: this.gameState, clock: this.clock });
+    this.faxLibrary = FAXES;
+    this.archive = new Archive({
+      state: this.gameState, clock: this.clock,
+      cards: SERVICE_CARDS, ledgers: LEDGERS, incidents: INCIDENTS,
+    });
+    this.phones = new BuildingPhones({
+      audio: this.audio, scene: this.scene, camera: this.renderer.camera,
+      state: this.gameState, clock: this.clock,
+    });
+
     /* ---- the effect resolver closes the loop ---- */
     this.effects = new EffectResolver({
       state: this.gameState, clock: this.clock, outages: this.outages,
       crews: this.crews, database: this.database, director: this.director,
       radio: this.radio, audio: this.audio, horror: this.horror, phone: this.phone,
+      // filled in below, once the building exists
+      game: this,
     });
     this.runner.deps.effects = this.effects;
     this.phone.effects = this.effects;
+    /* The building systems are built after the resolver (they need the
+       player, which needs the camera). Hand them over once they exist --
+       see the ops in effects.js that use them. */
+    this._lateEffects = () => Object.assign(this.effects.systems, {
+      power: this.power, paperlog: this.paperlog, fax: this.fax, archive: this.archive,
+      haunt: this.haunt, phones: this.phones, tasks: this.tasks, sequences: this.sequences,
+      doors: this.doors, terminal: this.terminal, faxLibrary: FAXES,
+    });
 
     /* ---- player ---- */
     this.player = new Player({
@@ -236,6 +288,28 @@ export class Game {
       camera: this.renderer.camera, player: this.player,
       interactables: this.dressing.interactables, audio: this.audio,
     });
+
+    this.haunt = new HauntDirector({
+      dressing: this.dressing, lighting: this.lighting, player: this.player,
+      audio: this.audio, state: this.gameState, clock: this.clock,
+      terminal: this.terminal, outages: this.outages, world: this.world,
+      doors: this.doors, phones: this.phones, power: this.power, horror: this.horror,
+    });
+    this.tasks = new TaskSystem({
+      power: this.power, paperlog: this.paperlog, archive: this.archive,
+      fax: this.fax, state: this.gameState, clock: this.clock, player: this.player,
+    });
+    this.director.deps.tasks = this.tasks;
+    this.sequences = new SequenceRunner({
+      game: this, state: this.gameState, clock: this.clock, audio: this.audio,
+      power: this.power, lighting: this.lighting, horror: this.horror, haunt: this.haunt,
+      phone: this.phone, phones: this.phones, director: this.director, tasks: this.tasks,
+      terminal: this.terminal, fax: this.fax, paperlog: this.paperlog, archive: this.archive,
+      player: this.player, radio: this.radio, doors: this.doors, world: this.world,
+      outages: this.outages, crews: this.crews,
+    });
+
+    this._lateEffects();
     this._wireInteractions();
 
     /* ---- presentation ---- */
@@ -245,6 +319,7 @@ export class Game {
       runner: this.runner, audio: this.audio, settings: this.settings,
       phone: this.phone, input: this.input,
     });
+    this.propUI = new PropUI({ input: this.input, audio: this.audio });
     this.save = new SaveSystem(this);
     this.menu = new Menu({
       settings: this.settings, save: this.save, input: this.input,
@@ -347,14 +422,330 @@ export class Game {
       this.setMode('ui');
     });
 
-    I.on('coffee', () => bus.emit(EVENTS.TOAST, { text: 'THE POT HAS BEEN ON SINCE THE DAY SHIFT' }));
+    I.on('coffee', () => {
+      S.set('had_coffee', true);
+      bus.emit(EVENTS.TOAST, { text: 'THE POT HAS BEEN ON SINCE THE DAY SHIFT' });
+    });
     I.on('vending', () => bus.emit(EVENTS.TOAST, { text: 'OUT OF ORDER SINCE AUGUST. THE LIGHT STILL WORKS.' }));
     I.on('files_dispatch', () => bus.emit(EVENTS.TOAST, { text: 'ACCOUNT FILES — EVERYTHING IN HERE IS ALSO ON THE TERMINAL' }));
-    I.on('files_records', () => bus.emit(EVENTS.TOAST, { text: 'OUTAGE HISTORY 1978 — PRESENT' }));
+    I.on('files_records', () => this.openLedgers());
     I.on('microfilm_box', () => {
       S.set('saw_microfilm', true);
-      bus.emit(EVENTS.TOAST, { text: 'MICROFILM CARTONS — 1956 TO 1962. THE READER IS GONE.' });
+      bus.emit(EVENTS.TOAST, { text: 'MICROFILM CARTONS — 1956 TO 1962. THE READER HAS BEEN BROKEN SINCE MARCH.' });
     });
+    I.on('microfilm_reader', () => {
+      /* Kept broken, deliberately. The player does not get a convenient
+         window onto 1943 -- they get a card index and their own hands. */
+      S.set('tried_microfilm_reader', true);
+      bus.emit(EVENTS.TOAST, { text: 'THE LAMP IS OUT. THERE IS A WORK ORDER ON IT FROM MARCH.' });
+    });
+
+    /* ============================================================
+       THE BUILDING
+       ============================================================ */
+
+    I.on('breakers', () => this.openBreakers());
+    I.on('paperlog', () => this.openPaperLog());
+    I.on('fax', () => this.openFax());
+    I.on('card_index', () => this.openCardIndex());
+
+    I.on('base_station', () => {
+      S.set('used_backup_radio', true);
+      this.audio.play('squelchOpen', { volume: 0.6 });
+      this.radio.transmit('T7', 'Dispatch, Seven. Finally. We have been calling you for ten minutes.', { delay: 0.6 });
+      bus.emit(EVENTS.TOAST, { text: 'BACKUP SET — KEYED UP' });
+    });
+
+    for (const room of ['dispatch', 'corridor', 'records', 'breakroom']) {
+      I.on(`switch:${room}`, () => {
+        const on = this.doors.toggleLight(room) ? this.doors.lightOn(room) : this.doors.lightOn(room);
+        setSwitchState(this.dressing[`switch_${room}`], on);
+        S.set(`light_${room}_${on ? 'on' : 'off'}`, true);
+      });
+    }
+
+    for (const inst of ['supervisor', 'records', 'breakroom', 'corridor']) {
+      I.on(`phone:${inst}`, () => {
+        if (!this.phones.isRinging(inst)) {
+          bus.emit(EVENTS.TOAST, { text: 'DIAL TONE' });
+          return;
+        }
+        const picked = this.phones.answer(inst);
+        S.set('answered_a_building_phone', true);
+        this.onBuildingPhoneAnswered(inst, picked);
+      });
+    }
+  }
+
+  /* ============================================================
+     THE OBJECTS
+     Each of these is the same panel with different paper in it.
+     ============================================================ */
+
+  /** Panel A. Four breakers, and whichever ones are down are red. */
+  openBreakers() {
+    this.gameState.set('opened_breakers', true);
+    const rows = () => {
+      /* The panel has to describe itself honestly -- a player who walked
+         down here because the lights went and reads "four tripped" when two
+         are tripped has been told the building is worse than it is. */
+      const down = CIRCUITS.filter((c) => !this.power.live(c.id)).length;
+      const WORD = ['No', 'One', 'Two', 'Three', 'Four'];
+      const list = [
+        { kind: 'head', text: 'PANEL A — DISTRICT OPERATIONS' },
+        {
+          kind: 'note',
+          text: down
+            ? `Main is clear. ${WORD[down] || down} branch breaker${down === 1 ? '' : 's'} tripped.`
+            : 'Main is clear. Nothing is tripped.',
+        },
+        { kind: 'rule' },
+      ];
+      for (const c of CIRCUITS) {
+        const live = this.power.live(c.id);
+        list.push({
+          kind: 'item', id: c.id,
+          text: `${c.order}.  ${c.label}`,
+          sub: live ? 'ON' : 'TRIPPED',
+          disabled: live,
+        });
+      }
+      if (this.power.allLive) {
+        list.push({ kind: 'gap' }, { kind: 'note', text: 'Everything is back on.' });
+      }
+      return list;
+    };
+    this.propUI.show({
+      id: 'breakers',
+      title: 'PANEL A',
+      sub: 'LIGHTING & POWER',
+      sound: 'drawer',
+      rows: rows(),
+      keys: [['nav', 'choose a breaker'], ['select', 'reset it'], ['cancel', 'step back']],
+      onPick: (row) => {
+        this.power.reset(row.id);
+        setBreakerState(this.dressing.breakerPanel, this.power);
+        this.propUI.refresh(rows());
+      },
+    });
+    this.setMode('ui');
+  }
+
+  /** The day book. Everything the player has earned the right to write. */
+  openPaperLog() {
+    this.gameState.set('opened_paperlog', true);
+    const rows = () => {
+      const list = [{ kind: 'head', text: `WRIGHT CO POWER — DAY BOOK, ${this.clock.dateLabel ? this.clock.dateLabel() : '11 NOV 1999'}` }];
+      if (this.paperlog.entries.length) {
+        for (const e of this.paperlog.entries) {
+          list.push({
+            kind: 'hand',
+            other: e.hand === 'other',
+            text: e.hand === 'other' ? e.text : `${e.stamp}   ${e.text}`,
+          });
+        }
+      } else {
+        list.push({ kind: 'note', text: 'Nothing written tonight yet.' });
+      }
+      const avail = this.paperlog.available();
+      list.push({ kind: 'gap' }, { kind: 'rule' });
+      if (avail.length) {
+        list.push({ kind: 'head', text: 'WRITE IT DOWN' });
+        for (const o of avail) list.push({ kind: 'item', id: o.id, text: o.text });
+      } else {
+        list.push({ kind: 'note', text: 'Nothing to add. You have written down what you can account for.' });
+      }
+      return list;
+    };
+    this.propUI.show({
+      id: 'paperlog',
+      title: 'THE DAY BOOK',
+      sub: 'RECORDS COUNTER',
+      sound: 'paper',
+      rows: rows(),
+      keys: [['nav', 'choose'], ['select', 'write it'], ['cancel', 'close the book']],
+      onPick: (row) => {
+        this.paperlog.record(row.id);
+        setLogPage(this.dressing.logBook, this.paperlog.entries);
+        this.propUI.refresh(rows());
+      },
+    });
+    this.setMode('ui');
+  }
+
+  /** The fax tray, and then one page at a time. */
+  openFax() {
+    const tray = this.fax.collect();
+    const pages = tray.length ? tray : this.fax.spike();
+    if (!pages.length) {
+      bus.emit(EVENTS.TOAST, { text: 'NOTHING IN THE TRAY' });
+      return;
+    }
+    const list = () => [
+      { kind: 'head', text: tray.length ? 'JUST ARRIVED' : 'ON THE SPIKE' },
+      ...pages.map((p) => ({ kind: 'item', id: p.id, text: p.subject, sub: p.from })),
+    ];
+    this.propUI.show({
+      id: 'fax',
+      title: 'FAX',
+      sub: `${pages.length} PAGE${pages.length === 1 ? '' : 'S'}`,
+      sound: 'paper',
+      rows: list(),
+      onPick: (row) => {
+        const page = pages.find((p) => p.id === row.id);
+        if (page) this.readFaxPage(page, list());
+      },
+    });
+    setFaxState(this.dressing.fax, { page: false });
+    this.setMode('ui');
+  }
+
+  readFaxPage(page, backRows) {
+    const rows = [
+      { kind: 'note', text: `FROM: ${page.from}` },
+      { kind: 'rule' },
+      ...page.lines.map((t) => ({ kind: 'text', text: t })),
+    ];
+    if (page.tail) rows.push({ kind: 'gap' }, { kind: 'note', text: page.tail });
+    rows.push({ kind: 'gap' }, { kind: 'item', id: '__back', text: '< BACK TO THE TRAY' });
+    if (page.flag) this.gameState.set(page.flag, true);
+    if (page.anomalous) this.gameState.set('saw_anomalous_fax', true);
+    /* A fax that describes an outage which has not happened yet is only
+       frightening if the outage then happens. The machine is right. */
+    if (page.predicts && !this.gameState.has('prediction_armed')) {
+      this.gameState.set('prediction_armed', true);
+      setTimeout(() => {
+        if (this.state !== STATE.PLAYING) return;
+        this.outages.create({ ...page.predicts, reportedBy: 'AUTOMATIC', stamp: this.clock.stamp() });
+        this.gameState.set('prediction_came_true', true);
+        this.gameState.log(this.clock.stamp(), `${page.predicts.feeder} out — exactly as the fax said.`, 'anomaly');
+        bus.emit(EVENTS.TOAST, { text: `${page.predicts.feeder} — BROKEN POLE — 212 METERS` });
+      }, 9 * 60 * 1000 / 60);          // nine shift minutes, at the shift rate
+    }
+    this.propUI.refresh(rows, page.subject);
+    this.propUI.open.onPick = (row) => {
+      if (row.id === '__back') this.propUI.refresh(backRows, 'FAX');
+    };
+  }
+
+  /** The card index: the drawer, and then the cards in it. */
+  openCardIndex() {
+    this.gameState.set('used_card_index', true);
+    const drawers = ['A-E', 'F-K', 'L-R', 'S-Z', '1940-59', '1960-83'];
+    const top = () => [
+      { kind: 'head', text: 'SERVICE CARD INDEX' },
+      { kind: 'note', text: 'Everything before the CIS went in. 1984 and earlier.' },
+      { kind: 'rule' },
+      ...drawers.map((d) => ({ kind: 'item', id: d, text: d })),
+    ];
+    const inDrawer = (d) => {
+      const cards = this.archive.cards.filter((c) => (
+        (c.drawer === d || (d.includes('-') && /^\d/.test(d)))
+        && (!c.requires || this.gameState.hasAll(c.requires))
+      ));
+      const rows = [
+        { kind: 'head', text: `DRAWER ${d}` },
+        { kind: 'rule' },
+      ];
+      if (!cards.length) {
+        rows.push({ kind: 'note', text: 'Nothing in here you have a reason to want.' });
+      }
+      for (const c of cards) {
+        rows.push({
+          kind: 'item', id: c.id, text: c.name,
+          sub: this.archive.wasPulled(c.id) ? 'PULLED' : c.service,
+        });
+      }
+      rows.push({ kind: 'gap' }, { kind: 'item', id: '__back', text: '< OTHER DRAWERS' });
+      return rows;
+    };
+    const showCard = (card) => {
+      const rows = [
+        ...card.lines.map((t) => ({ kind: 'text', text: t })),
+      ];
+      if (card.tail) rows.push({ kind: 'gap' }, { kind: 'note', text: card.tail });
+      rows.push({ kind: 'gap' }, { kind: 'item', id: '__back', text: '< PUT IT BACK' });
+      this.propUI.refresh(rows, card.service);
+      this.propUI.open.onPick = () => {
+        this.propUI.refresh(inDrawer(card.drawer), 'INDEX');
+        this.propUI.open.onPick = pickInDrawer(card.drawer);
+      };
+    };
+    const pickInDrawer = (d) => (row) => {
+      if (row.id === '__back') {
+        this.propUI.refresh(top(), 'INDEX');
+        this.propUI.open.onPick = pickTop;
+        return;
+      }
+      const card = this.archive.pull(row.id);
+      if (card) showCard(card);
+    };
+    const pickTop = (row) => {
+      this.propUI.refresh(inDrawer(row.id), row.id);
+      this.propUI.open.onPick = pickInDrawer(row.id);
+    };
+    this.propUI.show({
+      id: 'card_index', title: 'CARD INDEX', sub: 'INDEX',
+      sound: 'drawer', rows: top(), onPick: pickTop,
+    });
+    this.setMode('ui');
+  }
+
+  /** The bound outage ledgers on the Records shelf. */
+  openLedgers() {
+    const avail = this.archive.ledgers.filter((l) => !l.requires || this.gameState.hasAll(l.requires));
+    const incidents = this.archive.incidentPages();
+    const top = () => {
+      const rows = [{ kind: 'head', text: 'OUTAGE HISTORY' }, { kind: 'rule' }];
+      for (const l of avail) rows.push({ kind: 'item', id: l.id, text: l.title });
+      if (incidents.length) {
+        rows.push({ kind: 'gap' }, { kind: 'head', text: 'INCIDENT FILES' });
+        for (const i of incidents) rows.push({ kind: 'item', id: i.id, text: i.title });
+      }
+      if (!avail.length && !incidents.length) {
+        rows.push({ kind: 'note', text: 'Ledgers, 1978 to last year. Nothing you need right now.' });
+      }
+      return rows;
+    };
+    const showDoc = (doc) => {
+      const rows = doc.lines.map((t) => ({ kind: 'text', text: t }));
+      if (doc.tail) rows.push({ kind: 'gap' }, { kind: 'note', text: doc.tail });
+      rows.push({ kind: 'gap' }, { kind: 'item', id: '__back', text: '< BACK ON THE SHELF' });
+      this.propUI.refresh(rows, doc.title);
+      this.propUI.open.onPick = () => {
+        this.propUI.refresh(top(), 'RECORDS');
+        this.propUI.open.onPick = pick;
+      };
+    };
+    const pick = (row) => {
+      const led = avail.find((l) => l.id === row.id);
+      if (led) { this.gameState.set(`ledger:${led.id}`, true); showDoc(led); return; }
+      const inc = this.archive.readIncident(row.id);
+      if (inc) showDoc(inc);
+    };
+    this.propUI.show({
+      id: 'ledgers', title: 'RECORDS', sub: 'OUTAGE HISTORY',
+      sound: 'drawer', rows: top(), onPick: pick,
+    });
+    this.setMode('ui');
+  }
+
+  /** Somebody picked up an instrument that is not the console. */
+  onBuildingPhoneAnswered(id, inst) {
+    this.audio.play('hookUp', { volume: 0.7 });
+    const beat = this.gameState.beat;
+    if (beat >= BEAT.SEVENTEEN && !this.gameState.has('four_seventeen_answered')) {
+      /* At 0417 the instrument decides which fragment they get. This is the
+         one decision the sequence asks for, and it is made with their feet. */
+      const byRoom = {
+        supervisor: 's417_1978', records: 's417_1943',
+        breakroom: 's417_evp', corridor: 's417_internal',
+      };
+      this.director.fire(byRoom[id] || 's417_evp', 'four-seventeen');
+      return;
+    }
+    bus.emit(EVENTS.TOAST, { text: `${inst ? inst.label : 'EXTENSION'} — NOBODY THERE` });
+    this.gameState.set(`picked_up_${id}`, true);
   }
 
   _wireEvents() {
@@ -370,7 +761,12 @@ export class Game {
       }
       // Checkpoint at every story beat boundary.
       this.save.save(`beat ${this.gameState.beat}`);
-      if (this.gameState.has('slice_complete')) this.endSlice();
+      /* The cascade used to end the game here. It is now the end of ACT I:
+         the lights go, the terminal dies, and the night carries on in a
+         building the player has to walk around in. */
+      if (this.gameState.has('act_one_over') && !this.sequences.finished.has('cascade')) {
+        this.playSequence('cascade');
+      }
     });
 
     bus.on(EVENTS.BEAT, ({ beat }) => {
@@ -433,6 +829,17 @@ export class Game {
       return;
     }
     if (this.state !== STATE.PLAYING) return;
+
+    /* An object the player is holding takes the keyboard, the same way the
+       terminal does. Pad buttons are translated the same way too. */
+    if (this.propUI.visible) {
+      const asKey = PAD_AS_KEY[e.code];
+      if (this.propUI.handleKey(asKey ? { key: asKey, code: asKey } : e)) {
+        if (!this.propUI.visible) this.setMode('world');
+        e.preventDefault();
+        return;
+      }
+    }
 
     // The terminal takes the keyboard while the player is leaning into it.
     if (this.terminalFocused) {
@@ -694,6 +1101,165 @@ export class Game {
     this.setMode(this.terminalFocused ? 'ui' : 'world');
   }
 
+  /* ============================================================
+     THE BUILDING, ONCE PER FRAME
+
+     Three jobs: keep the props showing the truth, decide when an
+     authored sequence is due, and let the night arm a physical
+     change while the player is somewhere else.
+     ============================================================ */
+  _buildingTick(dt) {
+    const S = this.gameState;
+    this._bt = (this._bt || 0) + dt;
+
+    // --- props reflect their systems ---
+    setFaxState(this.dressing.fax, { page: this.fax.hasUnread, printing: this.fax.printing });
+    if (this.propUI.visible && this.propUI.open.id === 'breakers') {
+      setBreakerState(this.dressing.breakerPanel, this.power);
+    }
+
+    // --- the HUD objective belongs to the task, when there is one ---
+    if (this.tasks.objective && !this.objectiveHint) {
+      if (this._shownTask !== this.tasks.id) {
+        this._shownTask = this.tasks.id;
+        this.hud.setObjective(this.tasks.objective, true);
+      }
+    } else if (this._shownTask && !this.tasks.objective) {
+      this._shownTask = null;
+      if (!this.objectiveHint) this.hud.setObjective('');
+    }
+
+    /* --- where the player is, and what that means ---
+       Two facts the night needs: that they have BEEN to Records (so the
+       extension down there has a reason to ring the desk later), and the
+       state of the door they walked through. People shut the Records door
+       behind them; that is the only way a door can later be found open. */
+    const room = roomAt(this.player.pos.x, this.player.pos.z);
+    if (room !== this._room) {
+      if (room === 'records') S.set('been_to_records', true);
+      if (this._room === 'records' && room !== 'records' && !this.haunt.isActive('door_ajar')) {
+        this.doors.set('records', false, { silent: true });
+      }
+      this._room = room;
+    }
+
+    if (this._bt < 1) return;
+    this._bt = 0;
+
+    /* --- the fax spends the night being boring ---
+       Five pieces of ordinary county paperwork, spread across the first
+       four hours. This is not filler: the machine has to be dull for a
+       long time before it can be anything else. */
+    if (!this._faxPlan) {
+      this._faxPlan = [
+        [23 * 60 + 20, 'fax_wx1'],
+        [24 * 60 + 40, 'fax_roster'],
+        [25 * 60 + 55, 'fax_meter'],
+        [26 * 60 + 30, 'fax_mutual'],
+      ];
+    }
+    while (this._faxPlan.length && this.clock.minutes >= this._faxPlan[0][0]) {
+      const [, id] = this._faxPlan.shift();
+      this.fax.send(faxById(id));
+    }
+
+    // --- authored sequences, on the clock ---
+    const m = this.clock.minutes;
+    if (!this.sequences.running) {
+      if (m >= TIMETABLE.APPROACH && S.beat >= BEAT.RESTORED && !this.sequences.finished.has('four_seventeen')) {
+        this.playSequence('four_seventeen');
+      } else if (m >= TIMETABLE.DAWN_LIGHT && S.has('four_seventeen_done') && !this.sequences.finished.has('dawn')) {
+        this.playSequence('dawn');
+      } else if (S.has('warned_about_the_door') && !this.sequences.finished.has('the_knock')) {
+        this.playSequence('the_knock');
+      } else if (S.has('crew_needs_backup_set') && !this.sequences.finished.has('backup_radio')) {
+        this.playSequence('backup_radio');
+      }
+    }
+
+    /* --- somebody else has written in the book ---
+       Once, and only once, and only if the player has actually been keeping
+       it. It happens while they are somewhere else, and nothing points at
+       it: they find it the next time they open the book. */
+    if (!S.has('paperlog_defaced') && S.beat >= BEAT.LISTENER
+      && this.paperlog.entries.length >= 3 && room !== 'records'
+      && this.propUI.open === null) {
+      const anchor = this.paperlog.entries.find((e) => e.hand === 'player');
+      if (anchor) {
+        this.paperlog.deface(anchor.id, 'WE HEARD YOU TOO');
+        setLogPage(this.dressing.logBook, this.paperlog.entries);
+      }
+    }
+
+    /* --- it knows where the player is ---
+       Only once, only after the card index has been used, and only while the
+       player is standing in Records with the desk empty behind them. */
+    if (!this.sequences.running && S.has('used_card_index') && S.beat >= BEAT.LISTENER
+      && !S.has('it_knows_where_i_am') && !this._listenerFired
+      && roomAt(this.player.pos.x, this.player.pos.z) === 'records'
+      && this.phone.activeLine == null) {
+      this._listenerFired = true;
+      this.phones.ring('records', { seconds: 30, display: 'INTERNAL — x2214' });
+      setTimeout(() => {
+        if (this.state === STATE.PLAYING) this.director.fire('listener_here', 'the-building');
+      }, 4000);
+    }
+
+    /* --- the night arms something physical ---
+       Only while the player is away from the desk, only one at a time, only
+       with the act's spacing, and never during an authored sequence. */
+    if (!this.sequences.running && S.beat >= BEAT.BLACKOUT && this.haunt.cooldown <= 0) {
+      const away = roomAt(this.player.pos.x, this.player.pos.z) !== 'dispatch';
+      const pool = away
+        ? ['chair_turned', 'handset_off', 'desk_used', 'clocks_apart', 'records_extension']
+        : ['drawer_open', 'door_ajar', 'lights_behind', 'exterior_truck', 'records_1978'];
+      /* Away from the desk is the opportunity, so it is much likelier then:
+         the whole category only works on things DISCOVERED, and a player at
+         the desk can only discover the room they are already looking at. */
+      const chance = away ? 0.55 : 0.2;
+      for (const name of pool) {
+        if (this.haunt.canArm(name) && Math.random() < chance) {
+          if (this.haunt.arm(name)) break;
+        }
+      }
+    }
+  }
+
+  /** Start an authored sequence by id. */
+  playSequence(id) {
+    const seq = SEQUENCES[id] || Object.values(SEQUENCES).find((x) => x.id === id);
+    if (!seq) { console.warn(`no sequence "${id}"`); return false; }
+    return this.sequences.play(seq, { game: this, runner: this.runner, database: this.database });
+  }
+
+  /* ============================================================
+     THE END OF THE SHIFT
+
+     Not the end of the slice. The player worked a night; this is
+     what the night came to.
+     ============================================================ */
+  async endShift() {
+    if (this.state === STATE.ENDED) return;
+    this.state = STATE.ENDED;
+    this.clock.stop();
+    this.callUI.close();
+    this.propUI.close();
+    this.hud.show(false);
+    this.setMode('ui');
+    this.audio.stopAllVoices();
+    this.audio.stopLoop('crtWhine', 0.8);
+    this.audio.duck('ambience', 0.25, 2.0);
+    this.phones.silenceAll();
+    await this.menu.slate('PLEASE HOLD', { hold: 6000 });
+    this.menu.hideSlate();
+    this.horror.clearAll();
+    this.haunt.clearAll();
+    this.menu.report(this.gameState, this.clock, this.outages, {
+      paperlog: this.paperlog, archive: this.archive, crews: this.crews,
+    });
+    this.save.save('shift complete');
+  }
+
   async endSlice() {
     if (this.state === STATE.ENDED) return;
     this.state = STATE.ENDED;
@@ -750,6 +1316,15 @@ export class Game {
       this.horror.update(dt);
       this.runner.tick();
       this.callUI.update(dt);
+
+      // the building
+      this.doors.update(dt);
+      this.fax.update(dt);
+      this.phones.update(dt, this.player.pos);
+      this.tasks.update(dt);
+      this.haunt.update(dt);
+      this.sequences.update(dt);
+      this._buildingTick(dt);
 
       // The field advances on shift MINUTES, not frames. Step through every
       // minute that elapsed, so a slow frame -- or a horror event that moves

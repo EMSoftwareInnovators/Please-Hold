@@ -12,6 +12,8 @@ caller. Open a ticket. Send a unit that is rated for the work.
 
 Do not promise a restore time.
 
+The shift is 22:45 to 06:00 and you work all of it.
+
 ![the dispatch desk](docs/shots/05-seated.png)
 
 ---
@@ -97,6 +99,8 @@ npm run check:audio     # live bus levels, balance and voice-chain leaks
 npm run check:tutorial  # play the handover call gate by gate
 npm run check:controls  # key routing, pointer lock, the pause-menu loop
 npm run check:pad       # the whole job with pad buttons and no keyboard
+npm run check:night     # the whole shift: every act, 4:17, dawn, the ending
+npm run check:pacing    # how much silence the night actually contains
 node tools/perf.mjs     # lights, draw calls and render target per preset
 npm run shots           # capture screenshots to ./shots
 ```
@@ -178,6 +182,27 @@ the work, and the game will let you send them.
 line: the neighbour, the address that does not match what you are being told.
 Type into it, or press `Return` on the search box for on-screen keys.
 
+### Around the building
+
+The night will take you out of the chair. When it does, the phone stays where
+it is.
+
+| Keyboard | Pad | |
+|---|---|---|
+| `E` | `A` / `✕` | open a panel, a drawer, a book, the fax tray — and doors, light switches, the coffee maker |
+| arrows | d-pad | move the selection in whatever you opened |
+| `Return` | `A` / `✕` | throw a breaker, pull a card, write a line in the log, read a page |
+| `Esc` | `B` / `○` | close it |
+
+Everything you can open in the building — the breaker panel, the day book, the
+card index, the incident file, the fax tray — uses the same four keys the
+terminal does, and none of them look like a computer. They are paper under a
+work light.
+
+Doors open and stay open. Light switches work and stay switched. If the
+corridor is dark when you come back, it may well be because you left it that
+way.
+
 ### Playing on a controller, with no keyboard at all
 
 Everything is reachable with a pad — including the parts that used to be
@@ -237,33 +262,56 @@ not read.
 | Dispatch | crew recommendations with ETA, skill rating and a stated reason |
 | Field crews | 3 units that drive, arrive, work, and clear over the radio in real shift time |
 | Radio | queued traffic, squelch, per-crew voices, interference |
-| Story scheduler | beat calls, time calls, a weighted random pool, and a rhythm rule that keeps ordinary work between the strange calls |
-| Horror | 13 named events from "the storm could be doing this" to events with no innocent reading |
+| Story scheduler | beat calls, time calls, a weighted random pool, a rhythm rule that keeps ordinary work between the strange calls, and per-act pacing measured as **silence** — handset down to next ring |
+| Horror, transient | 14 named events from "the storm could be doing this" to events with no innocent reading |
+| Horror, persistent | 11 authored physical events that **change the room and stay changed** until the player puts them back — the chair, the handset, a drawer, a ticket nobody wrote, the Records room dressed as 1978 |
+| The night | acts, a clock timetable, and authored multi-minute sequences run from data (the cascade, 4:17, the knock, dawn) |
+| Reasons to get up | 8 jobs that are done away from the desk, raised by call scripts and by the building itself |
+| Power | four circuits and a breaker panel at the end of the corridor |
+| Paper log | the day book on the Records counter: contextually unlocked observations, no free typing, and it is not always only your handwriting |
+| Records | paper service cards, two ledgers and the 1978 incident file, for the accounts the CIS has never heard of |
+| Fax | a late-90s fax machine that prints mundane traffic all night, and then does not |
+| Telephones | five instruments in four rooms, each with its own position, ring and muffling through a wall |
+| Doors and lights | working doors, four light switches, per-room state that persists and saves |
 | Environment | procedural office, storm exterior, rain volume, rain-on-glass shader, lightning, fluorescent ballast simulation |
 | Audio | full synthesis, no files: rain built from brown noise, a wandering sheet and ~30-70 discrete impacts a second; thunder, ballast hum, CRT flyback, ring, dial tone, DTMF, squelch, hold music, and **five telephone line treatments** |
 | Voices | a source-filter synthesizer driven by the words themselves: spelling to phonemes, three formants that **slide** between targets, turbulence for the fricatives, real closures and bursts for the stops, and a phrase contour with stress and question rises |
 | Rendering budget | baked static lighting, a pooled light rig, static geometry merging, three quality presets and an adaptive resolution scaler |
 | Game clock | shift time, and events that can lie about it |
-| Save | checkpoint at every story beat |
+| Save | checkpoint at every story beat, carrying the breakers, the doors and their lights, the open task, the paper log, the pulled cards, the fax tray, the ringing instruments and any sequence in flight |
 | UI | title, options, how-to, pause, HUD, call panel, a full-takeover CRT terminal that scales with the window, end-of-shift report |
 | Tutorial | `waitFor` dialogue nodes that hold a conversation until the player performs a real action, with an on-screen objective that names the keys the player actually has |
 | Input | one binding table, keyboard and gamepad (Xbox / PlayStation button art chosen from the pad's own id), with every key hint on screen printed in whatever is plugged in |
 
-**The shift** — 14 call scripts, 238 nodes, 420 lines, 169 player replies:
+**The night** — 53 call scripts, 573 nodes, 1030 lines, 390 player replies,
+across a 22:45 → 06:00 shift that runs about an hour:
 
-* **a handover call that teaches the desk by waiting for you to use it.** The
-  night supervisor rings from home on your first solo shift and walks you
-  through sitting down, the terminal, an account lookup, a ticket, a crew, and
-  the hold button — each step held open until you have actually done it.
-  Nothing in it is strange, which is the point
-* four ordinary utility calls that give the night its texture
-* **Mrs. Daley**, who calls twice and remembers what you did the first time
-* a hazard call that forces a real trade-off against a finite number of trucks
-* a crew sequence over the radio that finds something that should not be there
-* a suspicious address that still has an innocent explanation
-* an EVP call built on a real audio chain, not on the words `[STATIC]`
-* a caller who says the year out loud, with corroborating evidence
-* the dispatcher who worked this desk in 1978
+* **Act I — the job.** A handover call that teaches the desk by waiting for
+  you to use it, ordinary utility traffic, Mrs. Daley calling twice and
+  remembering what you did, a hazard call with a real trade-off against three
+  trucks, a crew sequence that finds something that should not be there, an
+  EVP call built on a real audio chain, a caller who says the year out loud —
+  and then the dispatcher who worked this desk in 1978.
+* **The cascade.** The 1978 call ends and the building goes. That is the end
+  of Act I, not the end of the game: there is emergency lighting, a dead
+  terminal, a long silence, and then the breakers are at the end of the
+  corridor and somebody is on hold.
+* **Act II — the building.** Ordinary traffic comes back and the office stops
+  being scenery. Two more recurring callers with three-call arcs; callers from
+  1943 and 1987 whose existence is corroborated by paper in Records, not by
+  their own word; a man who calls three times from inside the same eleven
+  minutes; faxes dated before they arrive. The Listener is reported, then
+  heard, then imitates somebody you know and fails a question about them.
+* **The lull.** Around three in the morning the night goes quiet. Nothing
+  jumps out of it. That is the point.
+* **04:17.** Seeded all night, it arrives on its own: the traffic thins, the
+  radio stops, the storm eases — and then every telephone in the building
+  rings at once. The terminal shows nothing. You choose what to answer, and
+  you cannot answer all of it.
+* **Act III — the crisis.** A nursing home on generator fuel with hours left
+  is a real utility emergency, and it does not care what else is happening.
+* **Dawn.** 06:00, headlights in the lot, the day shift, an end-of-shift
+  report of what you actually did — and one last call.
 
 ---
 
@@ -280,7 +328,15 @@ not read.
 | ![the handover](docs/shots/12b-tutorial.png) | ![a call in the terminal](docs/shots/12c-terminal-on-call.png) |
 | the handover call, waiting for you to do the thing | a live call docked under the terminal while you work |
 | ![1956](docs/shots/15-1956-call.png) | ![please hold](docs/shots/20-please-hold.png) |
-| a caller whose line does not sound like 1999 | the end of the slice |
+| a caller whose line does not sound like 1999 | hold |
+| ![the day book](docs/shots/21-paperlog.png) | ![the card index](docs/shots/22-card-index.png) |
+| the day book: what you saw, in your own hand, where the terminal cannot reach it | a service card for a man who is on the telephone right now |
+| ![the corridor on emergency lighting](docs/shots/23-corridor-emergency.png) | ![the breaker panel](docs/shots/24-breakers.png) |
+| the corridor, after the building goes | the breakers, which are not at the desk |
+| ![the fax](docs/shots/25-fax.png) | ![a page from 1978](docs/shots/26-fax-1978.png) |
+| something came out of the fax | and it is dated 1978 |
+| ![0417](docs/shots/27-four-seventeen.png) | |
+| 04:17. Every instrument in the building, and nothing on the terminal | |
 
 ---
 
@@ -296,13 +352,28 @@ src/
   engine/             renderer, postfx, materials, textures, noise, audio,
                       phonemes (spelling -> speech), input,
                       controls (every binding), quality, bus
-  world/              plan, office builder, props, workstation, signage, lighting, weather, dress
+  world/              plan, office builder, props, workstation, gear (the
+                      building's own equipment), signage, lighting, weather, dress
   game/               clock, state, settings, save, player, interaction,
                       phone, dialogue, effects, calls, database, outages,
                       crews, dispatch, radio, horror, game
-  ui/                 hud, callui, terminal (state), terminalview (DOM), menu
+                      acts     the shape of the night
+                      power    circuits and the breaker panel
+                      doors    doors and room lights, with state
+                      tasks    the reasons to get up
+                      paperlog the day book on the Records counter
+                      archive  paper cards, ledgers, the 1978 incident file
+                      fax      the fax machine
+                      phones   every instrument in the building
+                      haunt    persistent + spatial horror
+                      sequences the runner for authored events
+  ui/                 hud, callui, terminal (state), terminalview (DOM),
+                      propui (everything that is paper, not a CRT), menu
   data/
     calls/            ONE FILE PER CONVERSATION  <- add dialogue here
+    sequences/        authored multi-minute events, as steps
+    archive.js        what is on paper and not in the CIS
+    faxes.js          what comes out of the fax machine
     accounts.js       the customer master file
     crews.js          the roster
     grid.js           the service territory
@@ -326,7 +397,22 @@ There are no binary assets yet, by design. Everything is generated:
 
 ## Known limitations
 
-See `ROADMAP.md`. The short version: this is a vertical slice. The shift does
-not yet run to 06:00 — it ends on the 1978 call.
+See `ROADMAP.md`. The short version:
+
+* **Nothing in this repository can hear the game.** The audio is rendered
+  offline to real WAVs and measured (`npm run check:render`), which is enough
+  to tell rain from static — it is not enough to tell a voice from a person.
+  Listen to `./audio/*.wav` yourself.
+* **No controller has actually been held.** The whole game is playable on a
+  pad and a harness proves it end to end, but there is no gamepad in CI, so
+  dead zones, trigger rest values and the DualSense id are untested.
+* **Every frame rate here is SwiftShader.** The structural budget (lights,
+  draw calls, triangles) is sound and measurable; the frame rate is not
+  measurable from a container. `F3` and `node tools/perf.mjs` report the real
+  ones.
+* **The full night has been verified headlessly, not played.** `npm run
+  check:night` plays all of it and asserts 30 things about the result. A human
+  sitting through the lull at three in the morning is a different test and it
+  has not happened yet.
 
 &copy; 2026 EM Software Innovators

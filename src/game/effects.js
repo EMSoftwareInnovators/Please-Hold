@@ -113,6 +113,52 @@ const OPS = {
   /* ---------------- presentation ---------------- */
   sound(op, ctx) { ctx.audio && ctx.audio.play(op.name, op.opts || {}); },
   horror(op, ctx) { ctx.horror && ctx.horror.fire(op.event, op.args || {}); },
+
+  /* ---------------- the building ----------------
+     These are what let a conversation reach out of the telephone and do
+     something to the room the player is sitting in. A caller from 1943 can
+     start the fax machine; the 1978 dispatcher can put the lights out. */
+
+  /** Send a page. `at` names one from src/data/faxes.js. */
+  fax(op, ctx) {
+    if (!ctx.fax) return;
+    const page = op.page || (ctx.faxLibrary || []).find((f) => f.id === op.at);
+    if (page) ctx.fax.send(page, { delay: op.delay ?? 0 });
+  },
+
+  /** Arm a persistent physical change. See haunt.js. */
+  haunt(op, ctx) { ctx.haunt && ctx.haunt.arm(op.name, { force: op.force !== false }); },
+
+  /** Trip or restore circuits. */
+  power(op, ctx) {
+    if (!ctx.power) return;
+    if (op.trip) ctx.power.trip(op.trip, { reason: op.reason || 'unknown', emergency: op.emergency !== false });
+    if (op.restore) ctx.power.resetAll();
+  },
+
+  /** Ring an instrument somewhere else in the building. */
+  ringPhone(op, ctx) {
+    if (!ctx.phones) return;
+    if (op.all) ctx.phones.ringAll({ seconds: op.seconds ?? 45 });
+    else ctx.phones.ring(op.id || 'dispatch', { seconds: op.seconds ?? 20, display: op.display });
+  },
+
+  /** Give the player a reason to stand up. */
+  task(op, ctx) {
+    if (!ctx.tasks) return;
+    if (op.cancel) ctx.tasks.cancel();
+    else ctx.tasks.start(op.id);
+  },
+
+  /** Unlock a paper-log observation without the player having to witness it
+      through a haunt -- used when the WITNESSING was the conversation. */
+  observe(op, ctx) { ctx.state.set(op.flag, true); },
+
+  /** Play an authored sequence (the cascade, 4:17, the knock, dawn). */
+  sequence(op, ctx) {
+    if (!ctx.sequences || !ctx.game) return;
+    ctx.game.playSequence(op.id);
+  },
   toast(op, ctx) { bus.emit(EVENTS.TOAST, { text: op.text }); },
 };
 

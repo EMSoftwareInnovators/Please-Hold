@@ -273,6 +273,30 @@ them recorded that it had happened, so a player who reached for the computer
 first sat there being told to sit down. One way in — `game.sitAtDesk()` — for
 anything a gate can wait on.
 
+### 3e. Everything else the player can open is one panel
+
+The breaker panel, the day book, the fax tray, the card index and the incident
+file are not computers, and they deliberately do not look like one: no amber
+phosphor, no scanlines, no 80 columns. They are paper and metal under a work
+light, and they all render through `ui/propui.js`.
+
+**One panel, not five.** The player has already learned up / down / select /
+back from the terminal; teaching them a second set of keys for the filing
+cabinet would be worse than useless. A new readable object is a `show({ id,
+title, sub, rows, onPick })` call, with the same row kinds.
+
+Two things that follow from §3d and are easy to break:
+
+* **The head and the key hints are pinned; only the body scrolls.** A long
+  service card used to push "< PUT IT BACK" off the bottom of the sheet, which
+  is a state with no visible way out.
+* **A document is not a list.** On a page whose only item is "put it back",
+  up and down turn the page instead of jumping the cursor, and the key hints
+  say "read on" rather than "choose". Cards and faxes are read, not navigated.
+
+Blank lines in a card or a fax are **authored** — they are the layout of a
+typed form — so an empty `text` row renders as a real gap, not as nothing.
+
 ## 4. Dialogue is data. Always.
 
 Every conversation in this game is a plain object in `src/data/calls/`. Nothing
@@ -326,6 +350,27 @@ A reply that returns to the node it came from (`"let me check that"`,
 least one reply that always progresses. Every call in the repo was written with
 this bug at least once; `tools/soak.mjs` catches it.
 
+### Sequences are data too
+
+A multi-minute authored event — the cascade at the end of Act I, 4:17, the
+knock at the rear door, dawn — is a list of steps in
+`src/data/sequences/index.js`, run by `src/game/sequences.js`:
+
+```js
+{ label: 'silence', wait: 9 },
+{ label: 'the chair', do: [{ op: 'haunt', id: 'chair_turned' }], wait: 4 },
+{ label: 'power back', until: (ctx) => ctx.power.allLive, timeout: 240 },
+```
+
+`do` is the same effect ops the dialogue uses. `wait` is seconds. `until` is a
+condition with a `timeout` so a sequence can never soft-lock the night. Give
+every step a `label`: the harnesses print them, and a sequence that stalls is
+diagnosed by reading the last label rather than by guessing.
+
+**A `wait` step is allowed to be long.** The nine seconds of silence after the
+building dies are the most important nine seconds in Act I, and the instinct
+to fill them is wrong.
+
 ## 5. Horror is escalation, not jumpscares
 
 `src/game/horror.js` is organised in tiers and they must stay that way:
@@ -338,7 +383,7 @@ this bug at least once; `tools/soak.mjs` catches it.
 
 **The game must not stay ambiguous forever.** Early events get an explanation
 and the player is allowed to keep it. Later events take the explanations away
-one at a time. By the end of a slice, the temporal nature of what is happening
+one at a time. By the end of the night, the temporal nature of what is happening
 must be undeniable and stated plainly by a character.
 
 **Never** solve a horror beat with a monster, a face at a window, or a loud
@@ -348,6 +393,77 @@ time, and calls from other decades.
 
 **Adding an event:** one entry in `HORROR` in `src/game/horror.js`, with
 `start`/`update`/`end`. Then fire it from data: `{ op: 'horror', event: 'name' }`.
+
+### 5a. Three kinds of horror, and they are not interchangeable
+
+There are two directors and the difference between them is the difference
+between a scare and a haunting.
+
+* **Transient** — `src/game/horror.js`. Something happens and then it is over:
+  a flicker, a brownout, a grade wobble, a burst of interference, a CRT
+  glitch. It lives for a number of seconds and restores itself. Fourteen of
+  these exist and they are the texture, not the event.
+* **Persistent** — `src/game/haunt.js`. Something *changes and stays changed*
+  until the player deals with it: the chair is turned around, the handset is
+  off the hook, a drawer is open, a ticket the player did not write is on the
+  console, the Records room is dressed as 1978. It is armed while the player
+  is elsewhere, it is noticed by walking near it, and it can be put back by
+  hand.
+* **Spatial** — the subset of the above that is attached to a *place*. Each
+  entry in `HAUNTS` carries a `notice` with a position and a radius, so the
+  event belongs to the corridor or the Records counter rather than to the
+  screen. The player finds it; it is not shown to them.
+
+**Prefer persistent over transient.** An effect the player watches is worth
+less than an object they have to walk over and touch. A flicker is deniable
+five seconds later. A chair that is still facing the wrong way when you come
+back with a coffee is not.
+
+Rules for `haunt.js`:
+
+* Only one haunt is armed at a time, and `spacing` seconds must pass between
+  them. Two at once reads as a malfunction, not a presence.
+* A haunt arms **while the player cannot see it** (`canArm`) and is discovered
+  by proximity, never by a cut or a camera move.
+* Every haunt must be reversible by the player — `clear()` — because putting
+  the chair back is the interaction that makes it real.
+* Nothing in `haunt.js` may touch or block the player. No chasing, no
+  cornering, no damage, no hiding mechanic. See §5.
+
+### 5b. The night has acts, and silence is content
+
+`src/game/acts.js` is the shape of the shift. A beat number maps to an act
+(`actFor`), and an act carries the pacing:
+
+| Act | When | Gap between ordinary calls |
+|---|---|---|
+| I — the job | 22:45 → the 1978 call | 34–78s |
+| II — the building | after the cascade | 46–105s |
+| II-LULL — around three | the mid-shift lull | 95–190s |
+| II-LATE — the crisis builds | before 4:17 | 40–92s |
+| III — 4:17 | the signature sequence | 8–20s, and the rules are off |
+| IV — dawn | after 5:00 | 60–140s |
+
+`CLOCK` in the same file is the timetable the night is hung on: midnight, the
+lull at 02:40–03:30, the traffic thinning at 04:08, **04:17**, the sky going at
+05:00, headlights at 05:45, the end of shift at 06:00. Anything that needs to
+happen at a time reads it from there rather than carrying its own number.
+
+A **gap is silence** — handset down to next ring, not call start to call
+start. `CALL_END` and `DIALOGUE_END` reset it. Measuring from the start of a
+call means a 55-second conversation eats the pause that was supposed to follow
+it, and the night turns into a call centre. That bug has been written once
+already; do not write it again.
+
+`tools/pacing.mjs` exists to fail if somebody "improves" the game by filling
+it in. **The game should contain silence. Silence is a feature.** The lull
+around 3 AM is authored, it is genuinely quiet, and it must not be broken with
+a loud noise — the point of it is that the player relaxes.
+
+The director's `_workload()` also widens the gap for a player who is busy:
+open tickets, crews in the field, the terminal in focus, a task that has them
+out of the room. Being punished for working is the same failure as being
+punished for exploring.
 
 ## 6. Ordinary calls are load-bearing
 
@@ -363,7 +479,68 @@ The director enforces this rhythm with `mundaneDebt` — a strange call raises i
 and ordinary calls pay it down, so supernatural calls always land against a
 floor of real work. Do not remove that mechanism; tune the numbers if needed.
 
-## 7. Architecture
+## 7. The reason to get up
+
+> ### THE REASON TO GET UP MUST COME FROM THE JOB, AND THE COST OF GETTING UP MUST BE THE PHONE.
+
+This is a hard rule, the same weight as §1 and §5, and the entire building is
+built around it.
+
+The desk is safe. It has a task, a screen and a telephone that tells you what
+to do next. That is exactly why the horror needs the player out of it — and it
+is also why the player must never be *lured* out of it.
+
+**Never** get the player up with:
+
+* a noise in the corridor that means nothing,
+* a door that unlocks because a timer said so,
+* "go and look at the spooky thing",
+* an objective that exists only to put them in a haunted room.
+
+**Always** get them up with work a night dispatcher would actually do:
+
+* the terminal is dead and the breakers are at the end of the corridor,
+* a caller gave a service number the CIS has never heard of and the paper
+  cards are in Records,
+* the supervisor said to write anything you cannot account for in the book,
+  and the book is on the Records counter,
+* the fax has printed something and the fax is not at the desk,
+* the desk radio has stopped transmitting and the base station is on the wall
+  outside,
+* it is three in the morning and the coffee is in the break room.
+
+Those live in `src/game/tasks.js`, one entry each, as data. Anything can raise
+one — a call script (`{ op: 'task', id: '...' }`), a sequence, a system.
+One at a time.
+
+### 7a. The cost is the phone, and the cost must be real
+
+Ordinary traffic keeps ringing while a task is open. The player *will* be in
+Records with the handset ringing behind them, and deciding whether to finish
+the sentence is the entire mechanic. Do not soften that.
+
+### 7b. Story beats do not fire into an empty chair
+
+The corollary, and it is not optional: **if the player is away from the desk,
+story calls WAIT.** `CallDirector.playerAway` is true whenever a task has the
+player in another room, and `update()` gates beat and time calls on it.
+
+Ordinary calls ring anyway — that is the cost. A *scripted* beat firing into
+an empty room is not a cost, it is a bug: it burns the scene, and it teaches
+the player that leaving the chair loses content. That is the fastest possible
+way to destroy everything in this section.
+
+### 7c. The building keeps state
+
+Doors (`src/game/doors.js`), light switches, breakers (`src/game/power.js`),
+the paper log, the pulled service cards and the collected faxes all persist
+and all serialize. A door the player left open is open when they come back. A
+light they turned off is off — including when something else turns it back on.
+
+Darkness the player caused themselves is worth more than darkness the game
+imposed. Let them cause it.
+
+## 8. Architecture
 
 Systems own their own rules. `src/game/game.js` wires them together and owns
 nothing. **If a feature can only be added by editing `game.js`, it has probably
@@ -377,6 +554,28 @@ been designed wrong.**
 * Interaction logic lives in `src/world/dress.js`, never inside a prop builder.
 * Geometry is built from data (`src/world/plan.js`), not hand-placed in code.
 
+The building added a lot of systems and none of them live in `game.js`:
+
+| | |
+|---|---|
+| `game/acts.js` | the shape of the night: beats, acts, pacing, the clock timetable |
+| `game/power.js` | four circuits, what trips them, what a trip does to the room |
+| `game/doors.js` | door leaves and per-room lights, with state that persists |
+| `game/tasks.js` | the reasons to get up (§7) |
+| `game/paperlog.js` | the book on the Records counter |
+| `game/archive.js` | paper service cards, ledgers and the 1978 incident file |
+| `game/fax.js` | the fax machine's queue, its print head and its tray |
+| `game/phones.js` | every telephone in the building, positioned, ringable |
+| `game/haunt.js` | persistent and spatial horror (§5a) |
+| `game/sequences.js` | the runner for authored multi-minute events |
+| `world/gear.js` | the props those systems need: panel, fax, base station, log book, card index |
+| `ui/propui.js` | **one** panel that renders all of them, because five bespoke UIs is five bugs |
+
+`game.js` grew exactly what wiring requires: construction order, the
+`_buildingTick` that asks the building where the player is, and the open/read
+handlers the interaction system calls. If a new feature needs more than that
+from `game.js`, it is in the wrong file.
+
 ### Naming
 
 * `restore(data)` means "load a saved snapshot" on every system. If a system
@@ -386,7 +585,7 @@ been designed wrong.**
 * Map coordinates are in **map units** (roughly km), +X east, +Y north.
 * World coordinates are in **meters**, +X east, +Z south, +Y up.
 
-## 8. Testing
+## 9. Testing
 
 **Do not assume code works because it looks correct.** These harnesses exist
 and all of them have caught real bugs:
@@ -396,7 +595,9 @@ and all of them have caught real bugs:
 | `node tools/calls.mjs` | static validation, no browser. Run it on every dialogue change. |
 | `node tools/boot.mjs` | boots the real game headless and fails on any console error |
 | `node tools/soak.mjs` | runs **every call script to completion on three different reply strategies** — this is what catches dead ends and infinite loops |
-| `node tools/playthrough.mjs` | drives a whole shift with real key events and asserts 29 things about the result |
+| `node tools/playthrough.mjs` | drives Act I with real key events and asserts 31 things about the result |
+| `node tools/fullnight.mjs` | plays the **whole night** — every act, every sequence, 4:17, dawn, the ending — satisfying every `waitFor` gate with the real action, and then arms all eleven persistent events and puts them back |
+| `node tools/pacing.mjs` | runs the director at real pacing in each act and measures the **silence**. It fails if the night gets filled in |
 | `node tools/audio.mjs` | taps the audio buses and measures RMS, spectral balance and voice-chain leaks |
 | `node tools/tutorial.mjs` | plays the handover call and asserts every `waitFor` gate opens on the right action, that the call stays readable inside the terminal, and that every instruction reaches the screen with real key names |
 | `node tools/controls.mjs` | key routing: the number row, the arrow-key handover between a docked call and the terminal, pad buttons through the same path `input.js` uses, the pause-menu loop, and that the camera comes back on its own |
@@ -411,9 +612,18 @@ frame-rate dependent will look broken there and be fine on real hardware** —
 the seated camera blend is the known example. When a harness disagrees with the
 game, instrument before you "fix" anything.
 
+**Game time in a harness runs at about a sixth of wall time.** `dt` is clamped
+to 0.05s a frame and SwiftShader draws about three frames a second, so ten
+wall seconds are under two game seconds. Anything measured in game seconds —
+call gaps, sequence waits, haunt spacing — has to be compressed explicitly by
+the harness, not waited out. `director.fastForward`, `sequences.speed` and
+`haunt.spacing` exist for exactly that, and `tools/fullnight.mjs` documents the
+arithmetic at the top. A harness that "hangs" is usually one that is patiently
+waiting for a game minute that will arrive in six real minutes.
+
 Never make a test pass by weakening the assertion.
 
-## 9. Code style
+## 10. Code style
 
 Match the surrounding code.
 
@@ -425,7 +635,7 @@ Match the surrounding code.
   genuinely deferred it goes in `ROADMAP.md`, not in a comment.
 * Keep `src/vendor/` unmodified. If three.js needs patching, wrap it instead.
 
-## 10. Audio
+## 11. Audio
 
 Everything is synthesized. Two rules learned the hard way:
 
@@ -476,7 +686,7 @@ static and is supposed to be.
 **Then listen to the files.** Every audio bug in this project so far passed
 whatever numeric check was in place at the time.
 
-## 11. Assets
+## 12. Assets
 
 The game currently ships zero binary assets and that is a feature, not a gap —
 it means every material, sign, model and voice can be replaced independently.

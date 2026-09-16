@@ -439,6 +439,70 @@ html, body {
   background: linear-gradient(100deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0) 38%);
 }
 
+/* ---------------- the building's objects ----------------
+   Paper and painted steel under a work light, deliberately NOT
+   the terminal: different ground, different type, no phosphor.
+   The player should never confuse the day book with the CIS. */
+#prop {
+  pointer-events: none;
+  display: grid; place-items: center;
+  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.88) 75%);
+}
+#prop .sheet {
+  pointer-events: all;
+  /* The head and the key hints are pinned and only the body scrolls: a long
+     service card used to push "< PUT IT BACK" off the bottom of the sheet,
+     which is the one thing a panel must never do. */
+  display: flex; flex-direction: column;
+  width: min(62cqw, 100cqh); max-height: 78cqh; overflow: hidden;
+  background: linear-gradient(180deg, #e8e2d0 0%, #ddd6c2 100%);
+  color: #23211a;
+  border: 1px solid #8d8571;
+  box-shadow: 0 2cqh 6cqh rgba(0,0,0,0.6);
+  padding: 2.2cqh 2.6cqw 1.6cqh;
+  font-size: 1.5cqw; line-height: 1.5;
+}
+#prop .sheet-head {
+  flex: 0 0 auto;
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 2px solid #23211a; padding-bottom: 0.7cqh; margin-bottom: 1.2cqh;
+}
+#prop-title { font-size: 1.7cqw; letter-spacing: 0.16em; font-weight: bold; }
+#prop-sub { font-size: 1.15cqw; letter-spacing: 0.1em; color: #6a6252; }
+#prop-body { min-height: 18cqh; flex: 1 1 auto; overflow-y: auto; }
+.p-head { font-weight: bold; letter-spacing: 0.12em; margin: 1cqh 0 0.4cqh; }
+.p-rule { border-top: 1px solid rgba(35,33,26,0.35); margin: 0.7cqh 0; }
+.p-gap { height: 1.1cqh; }
+.p-note { color: #6a6252; font-size: 1.25cqw; }
+.p-warn { color: #8c2f1d; font-weight: bold; }
+.p-text { margin: 0.2cqh 0; }
+.p-item {
+  display: flex; gap: 0.8cqw; align-items: baseline; cursor: pointer;
+  padding: 0.35cqh 0.6cqw; border-left: 2px solid transparent;
+}
+.p-item .mark { color: transparent; }
+.p-item.sel { background: rgba(35,33,26,0.10); border-left-color: #23211a; }
+.p-item.sel .mark { color: #23211a; }
+.p-item.off { color: #98917f; cursor: default; }
+.p-item .s { margin-left: auto; color: #6a6252; font-size: 1.2cqw; }
+/* Handwriting: the player's, and the other one. */
+.p-hand {
+  font-family: "Comic Sans MS", "DejaVu Sans", cursive, sans-serif;
+  color: #2a3350; transform: rotate(-0.25deg); margin: 0.25cqh 0;
+}
+.p-hand.other {
+  color: #14141a; font-weight: bold; font-size: 1.75cqw;
+  transform: rotate(0.6deg); margin: 0.6cqh 0 0.6cqh 2cqw;
+}
+#prop-keys {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; gap: 0.4cqh 1.6cqw;
+  border-top: 1px solid rgba(35,33,26,0.35); margin-top: 1.2cqh; padding-top: 0.8cqh;
+  font-size: 1.1cqw; letter-spacing: 0.12em; color: #6a6252;
+}
+#prop-keys span { display: flex; align-items: baseline; gap: 0.45cqw; }
+#prop-keys b { font-weight: normal; color: #23211a; border: 1px solid #8d8571; padding: 0 0.4cqw; }
+
 /* ---------------- title ---------------- */
 #title {
   pointer-events: all;

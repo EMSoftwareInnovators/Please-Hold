@@ -52,6 +52,12 @@ await page.evaluate(() => {
   });
   // Run the shift fast: the scheduler's breathing room is for players.
   g.director.minGapSeconds = 0.05;
+  /* The director now aims for a GAP measured in game seconds -- 34 to 78 of
+     them in Act I -- and game time runs at a fraction of wall time in a
+     software renderer. Without this the first call arrives five real minutes
+     from now. See tools/pacing.mjs for what the gaps are for. */
+  g.director.fastForward = true;
+  g.director._target = 0;
   g.clock.secondsPerMinute = 0.06;
 });
 
@@ -363,7 +369,11 @@ const out = await page.evaluate(() => {
     phoneActive: g.phone.activeLine,
     radioCall: g.radioCall ? g.radioCall.id : null,
     keyFlags: {
-      sliceComplete: flags.includes('slice_complete'),
+      /* Keefe used to end the game here. It is now the end of ACT I: the
+         cascade sequence takes over and the night continues in a dark
+         building. The rest of the shift is tools/fullnight.mjs. */
+      actOneOver: flags.includes('act_one_over'),
+      cascadeRan: !!(window.__game.sequences && window.__game.sequences.log.some((l) => l.id === 'cascade')),
       copper: flags.includes('pole_tag_1956'),
       evpWarning: flags.includes('evp_warning_received'),
       pratt1956: flags.includes('pratt_said_1956'),
@@ -381,7 +391,7 @@ console.log('\n--- shift result ---');
 console.log(JSON.stringify(out, null, 1));
 console.log('');
 
-check('the whole beat chain completed', out.keyFlags.sliceComplete, `beat ${out.beat}`);
+check('the whole Act I beat chain completed', out.keyFlags.actOneOver, `beat ${out.beat}`);
 check('a recurring caller called back', out.daleyCalls >= 2, `Daley calls: ${out.daleyCalls}`);
 check('a crew was dispatched over the radio', out.dispatches >= 1);
 check('an outage was restored by a crew', out.restored >= 1);
@@ -395,7 +405,11 @@ check('the 1978 dispatcher said his line', out.keyFlags.keefe1956);
 check('the player answered it', out.keyFlags.saidTheLine);
 check('horror events actually fired', out.horrorFired.length >= 4, out.horrorFired.join(', '));
 check('anomalies were logged', out.anomalies >= 4, `${out.anomalies} entries`);
-check('the shift reached the end slate', out.state === 'ended' || out.keyFlags.sliceComplete);
+/* NOT an end slate any more. The correct outcome of Act I is that the
+   building goes dark and the player is still in it. */
+check('Keefe ends the act, not the game',
+  out.keyFlags.cascadeRan && out.state === 'playing',
+  `cascade ${out.keyFlags.cascadeRan}, state ${out.state}`);
 check('no runtime errors', errors.length === 0, errors.slice(0, 4).join(' | '));
 
 await browser.close();

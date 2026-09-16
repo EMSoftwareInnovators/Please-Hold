@@ -70,19 +70,19 @@ export const WALLS = [
   // west wall -- door out to the corridor at z 6.1..7.05
   {
     a: [0, 8], b: [0, 0], mat: 'wallPaint', h: CEIL,
-    holes: [{ t0: 0.95, t1: 1.9, y0: 0, y1: 2.10, kind: 'door' }],
+    holes: [{ t0: 0.95, t1: 1.9, y0: 0, y1: 2.10, kind: 'door', id: 'dispatch' }],
   },
 
   /* ---------- corridor ---------- */
   // north side of the corridor, with the records door
   {
     a: [-7, 5.5], b: [0, 5.5], mat: 'cinderblock', h: CEIL_HALL,
-    holes: [{ t0: 2.1, t1: 3.05, y0: 0, y1: 2.10, kind: 'door' }],
+    holes: [{ t0: 2.1, t1: 3.05, y0: 0, y1: 2.10, kind: 'door', id: 'records' }],
   },
   // south side, with the break room door
   {
     a: [0, 7.5], b: [-7, 7.5], mat: 'cinderblock', h: CEIL_HALL,
-    holes: [{ t0: 3.95, t1: 4.9, y0: 0, y1: 2.10, kind: 'door' }],
+    holes: [{ t0: 3.95, t1: 4.9, y0: 0, y1: 2.10, kind: 'door', id: 'breakroom' }],
   },
   // the west end -- the exterior stair door. It does not open tonight.
   {

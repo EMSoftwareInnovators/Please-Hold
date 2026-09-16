@@ -34,6 +34,12 @@ await page.waitForTimeout(900);
 await page.evaluate(() => {
   const g = window.__game;
   g.director.minGapSeconds = 0.05;
+  /* The director now aims for a GAP measured in game seconds -- 34 to 78 of
+     them in Act I -- and game time runs at a fraction of wall time in a
+     software renderer. Without this the first call arrives five real minutes
+     from now. See tools/pacing.mjs for what the gaps are for. */
+  g.director.fastForward = true;
+  g.director._target = 0;
   window.__hints = [];
   window.__shown = [];
   window.__gates = [];

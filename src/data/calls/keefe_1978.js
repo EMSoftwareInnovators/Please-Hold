@@ -434,8 +434,11 @@ export default {
         { text: "PLEASE HOLD", stage: 'title', pause: 4.0 },
       ],
       effects: [
-        { op: 'flag', name: 'slice_complete' },
-        { op: 'beat', to: 10 },
+        /* THIS IS THE END OF ACT I, NOT THE END OF THE GAME.
+           `act_one_over` starts the cascade sequence (data/sequences), which
+           puts the building out and leaves the player in it. The old build
+           set `slice_complete` here and rolled the title. */
+        { op: 'flag', name: 'act_one_over' },
         { op: 'log', text: 'END OF SHIFT RECORD.', kind: 'end' },
       ],
       end: true,

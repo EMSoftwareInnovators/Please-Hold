@@ -10,6 +10,7 @@
    All of these return plain <canvas> elements. Swap any one of
    them for a loaded image later and nothing else changes.
    ============================================================ */
+import * as THREE from '../vendor/three.module.js';
 import { TERRITORY, SUBSTATIONS, FEEDERS, TOWNS, WATER, ROADS, OPS_CENTER } from '../data/grid.js';
 import { rng } from '../engine/noise.js';
 
@@ -225,6 +226,63 @@ export function labelPlate(text, opts = {}) {
   const m = ctx.measureText(text);
   ctx.fillText(text, (w - m.width) / 2, h * 0.66);
   return c;
+}
+
+/**
+ * Typed or handwritten lines on paper, as a texture.
+ *
+ * Used for the breaker panel's schedule card, drawer labels, and the open
+ * page of the paper log. `hands` marks which lines are in somebody else's
+ * handwriting -- which is used exactly once in the night, and is the reason
+ * this takes a per-line style at all.
+ */
+export function labelTexture(lines, opts = {}) {
+  const w = opts.w || (opts.small ? 256 : 384);
+  const h = opts.h || (opts.small ? 96 : 512);
+  const c = canvas(w, h);
+  const ctx = c.getContext('2d');
+  paperGround(ctx, w, h, opts.seed || 11, opts.stock || (opts.hand ? '#efe9d6' : '#e6e1d0'));
+
+  let y = opts.title ? 46 : 28;
+  if (opts.title) {
+    ctx.fillStyle = '#1f1d17';
+    ctx.font = `bold 22px ui-monospace, "DejaVu Sans Mono", monospace`;
+    ctx.fillText(opts.title, 16, 28);
+    ctx.strokeStyle = 'rgba(40,40,40,0.4)';
+    ctx.beginPath(); ctx.moveTo(14, 34); ctx.lineTo(w - 14, 34); ctx.stroke();
+  }
+  if (opts.hand) {
+    ctx.strokeStyle = 'rgba(40,60,110,0.16)';
+    for (let ly = 40; ly < h - 10; ly += 30) {
+      ctx.beginPath(); ctx.moveTo(14, ly); ctx.lineTo(w - 14, ly); ctx.stroke();
+    }
+    y = 62;
+  }
+  lines.forEach((t, i) => {
+    const other = opts.hands && opts.hands[i] === 'other';
+    /* Somebody else's handwriting: heavier, larger, and sloped the other way.
+       It should be obvious at a glance that a different hand wrote it, from
+       the shape of the line and not from a caption telling the player so. */
+    ctx.save();
+    if (opts.hand) {
+      ctx.fillStyle = other ? '#1b1b22' : '#2a3350';
+      ctx.font = `${other ? 'bold ' : ''}${other ? 21 : 15}px "Comic Sans MS", "DejaVu Sans", cursive, sans-serif`;
+      ctx.translate(18, y);
+      ctx.rotate(other ? 0.035 : -0.012);
+      ctx.fillText(String(t).slice(0, 44), 0, 0);
+    } else {
+      ctx.fillStyle = '#242219';
+      ctx.font = `${opts.small ? 16 : 15}px ui-monospace, "DejaVu Sans Mono", monospace`;
+      ctx.fillText(String(t).slice(0, 34), 16, y);
+    }
+    ctx.restore();
+    y += opts.hand ? 30 : (opts.small ? 22 : 24);
+  });
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
 }
 
 /** A wall of binder spines for the records shelving. */

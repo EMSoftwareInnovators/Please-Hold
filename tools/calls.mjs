@@ -1,7 +1,7 @@
 /* Validates every call script without launching the game.
    Checks the dialogue graph (missing gotos, unreachable nodes, stalls) and
    every effect op against the resolver's actual op list. */
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
@@ -49,10 +49,21 @@ for (const call of CALLS) {
     for (const op of all) if (op.op === 'schedule') scheduledBy.add(op.call);
   }
 }
+/* Calls that GAME CODE fires rather than another script: the 0417
+   fragments, the day shift, the last call. They are marked `type: 'called'`
+   and the one thing worth checking about them is that something in src/
+   actually names them. */
+const src = [
+  'src/game/game.js', 'src/data/sequences/index.js',
+].map((f) => { try { return readFileSync(f, 'utf8'); } catch { return ''; } }).join('\n');
+
 for (const call of CALLS) {
   const t = (call.schedule || {}).type;
   if (t === 'queued' && !scheduledBy.has(call.id)) {
     problems.push(`${call.id}: schedule.type is "queued" but no call ever schedules it`);
+  }
+  if (t === 'called' && !src.includes(`'${call.id}'`) && !scheduledBy.has(call.id)) {
+    problems.push(`${call.id}: schedule.type is "called" but nothing in src/ fires it`);
   }
   if (!t) problems.push(`${call.id}: no schedule block`);
 }

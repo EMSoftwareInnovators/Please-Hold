@@ -27,6 +27,11 @@ import evp_01 from './evp_01.js';
 import pratt_1956 from './pratt_1956.js';
 import keefe_1978 from './keefe_1978.js';
 import ordinary from './ordinary.js';
+import nightTraffic from './night_traffic.js';
+import recurring from './recurring.js';
+import eras from './eras.js';
+import listener from './listener.js';
+import lateNight from './late_night.js';
 
 /**
  * The shift, in the order it is meant to be experienced. `schedule.type`
@@ -44,7 +49,29 @@ import ordinary from './ordinary.js';
  *   beat 8  pratt_1956     the year, said out loud.
  *   beat 9  keefe_1978     the desk, twenty-one years earlier.
  *
- * `ordinary` is the random pool that fills the gaps between them.
+ * ACT II opens when Keefe loses carrier and the building goes down:
+ *
+ *   beat 10 (blackout)   the cascade sequence. No call -- the game happens
+ *                        in the corridor, at a breaker panel.
+ *   beat 11 listener_01  somebody else is breathing on a customer's line.
+ *   beat 12 gaines_1943  a farm on a road that was renamed in 1958. The CIS
+ *                        has never heard of him; the card index has.
+ *   beat 13 mercer_01    "There's smoke upstairs." She will say it again.
+ *           evp_02       fragments: seven, the fence.
+ *   beat 14 halvorsen_1987  a video shop in a building that is a bank.
+ *   beat 15 evp_03       a second voice underneath an ordinary caller.
+ *           crew_sikes_wrong_road  a substation that is not on any map.
+ *   beat 16 daley_wrong  it has her voice. It does not know who Walter is.
+ *   beat 17 bethel_01    thirty-one people, a generator, four hours of fuel.
+ *   beat 18 ott_refuses  the man who has seen BR-01 come up before.
+ *
+ * ACT III is 04:17 and is driven by data/sequences: five fragments ring on
+ * five different telephones and the player can answer one.
+ *
+ * ACT IV is dawn, the day shift, and the last call.
+ *
+ * `ordinary` and `nightTraffic` are the random pool that fills the gaps.
+ * There are twenty of them, and they are the reason any of the rest works.
  */
 export const CALLS = [
   tutorial_01,
@@ -58,6 +85,11 @@ export const CALLS = [
   pratt_1956,
   keefe_1978,
   ...ordinary,
+  ...nightTraffic,
+  ...recurring,
+  ...eras,
+  ...listener,
+  ...lateNight,
 ];
 
 export default CALLS;

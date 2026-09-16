@@ -5,6 +5,7 @@
    callbacks and calls them. Nothing in src/game/ imports this.
    ============================================================ */
 import { label as controlLabel, isAction } from '../engine/controls.js';
+import { escapeHtml } from './hud.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -339,7 +340,7 @@ export class Menu {
   }
 
   /** The report shown when the shift ends. */
-  report(state, clock, outages) {
+  report(state, clock, outages, extra = {}) {
     const flags = (list) => list.filter((f) => state.has(f)).length;
     const daley = state.caller('daley');
     const lines = [];
@@ -369,9 +370,41 @@ export class Menu {
     if (state.has('pole_tag_1956')) lines.push(`<dt>POLE 441</dt><dd>Tagged 1956. Halloran kept the copper.</dd>`);
     if (state.has('pratt_said_1956')) lines.push(`<dt>E. PRATT</dt><dd>${state.has('told_pratt_the_year') ? 'You told him what year it was.' : 'You let him keep his year.'}</dd>`);
     if (state.has('keefe_said_1956')) lines.push(`<dt>R. KEEFE</dt><dd>1978. Same desk. He asked you to answer it.</dd>`);
+    if (state.has('gaines_confirmed')) lines.push(`<dt>H. GAINES</dt><dd>Bell Ridge Road. You found his card. 1943.</dd>`);
+    if (state.has('loop_recognised')) lines.push(`<dt>A. MERCER</dt><dd>${state.has('told_mercer_she_got_out') ? 'You told her she got out.' : state.has('told_mercer_truth') ? 'You told her the truth.' : 'She asked. You did not answer.'}</dd>`);
+    if (state.has('imitation_caught')) lines.push(`<dt>&ldquo;MRS. DALEY&rdquo;</dt><dd>It got the voice right. It did not know who Walter was.</dd>`);
+    if (state.has('four_seventeen_done')) lines.push(`<dt>0417</dt><dd>Every telephone in the building. Eleven minutes.</dd>`);
     lines.push(`</dl>`);
-    lines.push(`<p style="margin-top:20px">This is the end of the vertical slice. The shift
-      does not end at 06:00 yet &mdash; see ROADMAP.md.</p>`);
+
+    /* --- the paper log: the only record that is still true at dawn --- */
+    const paper = extra.paperlog;
+    if (paper) {
+      lines.push(`<h3>THE DAY BOOK</h3>`);
+      if (paper.entries.length) {
+        lines.push(`<p style="line-height:1.9">${paper.entries.map((e) => (
+          e.hand === 'other'
+            ? `<span style="font-weight:bold">${escapeHtml(e.text)}</span>`
+            : `<b>${e.stamp}</b> &nbsp; ${escapeHtml(e.text)}`
+        )).join('<br>')}</p>`);
+        lines.push(`<p style="color:#8a7a5e">${paper.score} point${paper.score === 1 ? '' : 's'} of it
+          in your handwriting. The terminal log disagrees with most of this. The book does not care.</p>`);
+      } else {
+        lines.push(`<p>You did not write anything down.</p>`);
+        lines.push(`<p style="color:#8a7a5e">In the morning there is no record that any of it happened.</p>`);
+      }
+    }
+
+    const arch = extra.archive;
+    if (arch) {
+      const inv = arch.investigation;
+      lines.push(`<h3>BR-78</h3>`);
+      lines.push(`<p>${inv.read} of ${inv.total} pages of the incident file.
+        ${inv.read >= inv.total ? 'You know what happened at Blackridge.'
+          : inv.read >= 2 ? 'You know most of what happened at Blackridge.'
+            : inv.read ? 'You started reading.' : 'You never opened it.'}</p>`);
+    }
+
+    lines.push(`<p style="margin-top:20px">Day shift has the desk. Go home.</p>`);
     this.panel('report', lines.join(''));
   }
 }

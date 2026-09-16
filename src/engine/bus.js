@@ -51,6 +51,18 @@ export const EVENTS = {
 
   // ui
   TOAST: 'ui:toast',
+
+  /* --- the building, as opposed to the telephone --- */
+  POWER_STATE: 'power:circuits',
+  PAPERLOG: 'paper:entry',
+  FAX: 'fax:page',
+  ARCHIVE: 'records:pulled',
+  HAUNT: 'haunt:event',
+  SEQUENCE: 'sequence:step',
+  TASK: 'task:state',
+  DOOR: 'door:state',
+  LIGHT: 'light:state',
+  BUILDING_RING: 'phones:ring',
   TERMINAL_SCREEN: 'terminal:screen',
 };
 

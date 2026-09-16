@@ -733,6 +733,99 @@ export class AudioEngine {
       case 'keyClack': burst(0.035, 1800 + Math.random() * 900, 3.5, 0.09); break;
       case 'drawer': burst(0.34, 520, 1.1, 0.16); break;
       case 'breaker': tone(60, 0.20, 'square', 0.22); burst(0.10, 700, 2, 0.28); break;
+      case 'switchClick': burst(0.02, 2400, 6, 0.26); tone(150, 0.03, 'square', 0.10); break;
+      case 'doorOpen': { burst(0.30, 260, 1.0, 0.16); tone(70, 0.28, 'sine', 0.05); break; }
+      case 'doorClose': { burst(0.12, 180, 0.9, 0.30); tone(58, 0.16, 'sine', 0.10); break; }
+      case 'doorLocked': { burst(0.05, 900, 3.5, 0.24); burst(0.05, 900, 3.5, 0.18); break; }
+      case 'penScratch': {
+        // Six short scrapes: somebody writing four words on a ruled page.
+        for (let i = 0; i < 7; i++) burst(0.035 + Math.random() * 0.02, 2600 + Math.random() * 1800, 1.1, 0.06);
+        break;
+      }
+      case 'ballastPop': { burst(0.04, 1200, 4, 0.30); tone(120, 0.05, 'square', 0.08); break; }
+      case 'roomShift': {
+        /* The sound of the room being a different room: a sub drop and a
+           reversed-sounding swell. Used once. */
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.type = 'sine'; o.frequency.setValueAtTime(140, t);
+        o.frequency.exponentialRampToValueAtTime(34, t + 1.1);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.22 * vol, t + 0.9);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+        o.connect(g).connect(this.master); o.start(t); o.stop(t + 1.7);
+        burst(1.2, 300, 0.5, 0.10);
+        break;
+      }
+      case 'knock': {
+        /* Three on a steel fire door, from the far side. Low, flat, and with
+           the corridor on it -- the player is not meant to enjoy this. */
+        for (let i = 0; i < 3; i++) {
+          const kt = t + i * 0.52;
+          const o = ctx.createOscillator(); const g = ctx.createGain();
+          o.type = 'sine'; o.frequency.setValueAtTime(96, kt);
+          o.frequency.exponentialRampToValueAtTime(52, kt + 0.14);
+          g.gain.setValueAtTime(0.34 * vol, kt);
+          g.gain.exponentialRampToValueAtTime(0.0001, kt + 0.20);
+          o.connect(g).connect(this.master); o.start(kt); o.stop(kt + 0.22);
+          burst(0.10, 420, 1.2, 0.20);
+        }
+        break;
+      }
+      case 'faxHandshake': {
+        /* CNG: 1100Hz, half a second on, three off, and then the pair of
+           them negotiating. Anyone who used a fax in 1999 has this sound
+           filed under "wrong number" and, tonight, under something else. */
+        for (const off of [0, 3.2]) {
+          const o = ctx.createOscillator(); const g = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = 1100;
+          g.gain.setValueAtTime(0.0001, t + off);
+          g.gain.linearRampToValueAtTime(0.16 * vol, t + off + 0.02);
+          g.gain.setValueAtTime(0.16 * vol, t + off + 0.48);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.52);
+          o.connect(g).connect(this.buses.sfx); o.start(t + off); o.stop(t + off + 0.55);
+        }
+        // the answering tone, and then the modems shrieking at each other
+        const o2 = ctx.createOscillator(); const g2 = ctx.createGain();
+        o2.type = 'sine'; o2.frequency.value = 2100;
+        g2.gain.setValueAtTime(0.0001, t + 1.1);
+        g2.gain.linearRampToValueAtTime(0.13 * vol, t + 1.15);
+        g2.gain.setValueAtTime(0.13 * vol, t + 2.0);
+        g2.gain.exponentialRampToValueAtTime(0.0001, t + 2.1);
+        o2.connect(g2).connect(this.buses.sfx); o2.start(t + 1.1); o2.stop(t + 2.15);
+        for (let i = 0; i < 26; i++) {
+          const ht = t + 2.2 + i * 0.03;
+          const o3 = ctx.createOscillator(); const g3 = ctx.createGain();
+          o3.type = 'square';
+          o3.frequency.value = 800 + Math.random() * 2200;
+          g3.gain.setValueAtTime(0.05 * vol, ht);
+          g3.gain.exponentialRampToValueAtTime(0.0001, ht + 0.04);
+          o3.connect(g3).connect(this.buses.sfx); o3.start(ht); o3.stop(ht + 0.05);
+        }
+        break;
+      }
+      case 'faxPrint': {
+        /* The stepper motor. Twenty-two seconds of a machine chewing paper,
+           compressed to five: a buzz that ratchets, with the paper feed
+           under it. This is the sound that means something arrived. */
+        const dur = 5.4;
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.type = 'sawtooth'; o.frequency.value = 138;
+        const lfo = ctx.createOscillator(); const lg = ctx.createGain();
+        lfo.type = 'square'; lfo.frequency.value = 17; lg.gain.value = 0.09;
+        lfo.connect(lg).connect(g.gain);
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 1.1;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.13 * vol, t + 0.25);
+        g.gain.setValueAtTime(0.13 * vol, t + dur - 0.4);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(bp).connect(g).connect(this.buses.sfx);
+        o.start(t); lfo.start(t); o.stop(t + dur); lfo.stop(t + dur);
+        for (let i = 0; i < 40; i++) {
+          burst(0.02, 4200 + Math.random() * 1800, 1.4, 0.04);
+        }
+        break;
+      }
       case 'crtDegauss': {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
@@ -1028,7 +1121,81 @@ export class AudioEngine {
         out.connect(this.buses.radio);
         break;
       }
+      case 'offHook': {
+        /* A handset lying on a desk with an open line under it. Dial tone at
+           a distance: the two tones, muffled by the fact that nobody is
+           holding it to their ear, and then the howler if it goes on. */
+        for (const f of [350, 440]) {
+          const o = ctx.createOscillator();
+          o.type = 'sine'; o.frequency.value = f;
+          const g = ctx.createGain(); g.gain.value = 0.020;
+          const lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.7;
+          o.connect(g).connect(lp).connect(out);
+          o.start();
+          stops.push(() => { try { o.stop(); } catch {} });
+        }
+        out.connect(this.buses.phone);
+        break;
+      }
       default:
+        /* ---- a telephone ringing somewhere else in the building ----
+           `ring:<id>` loops the cadence of one instrument, with a lowpass
+           that stands in for the walls between it and the player. This is
+           the whole basis of the breaker sequence and of 4:17: the desk
+           phone, heard from the far end of the corridor. */
+        if (name.startsWith('ring:')) {
+          const bell = opts.kind !== 'electronic';
+          const muffle = ctx.createBiquadFilter();
+          muffle.type = 'lowpass';
+          muffle.frequency.value = 5000;
+          muffle.Q.value = 0.6;
+          muffle.connect(out);
+          out.connect(this.buses.phone);
+          out.gain.value = opts.volume ?? 0.0001;
+
+          const strike = (when) => {
+            if (bell) {
+              for (let i = 0; i < 16; i++) {
+                const bt = when + i * 0.05;
+                const o = ctx.createOscillator(); const g = ctx.createGain();
+                o.type = 'triangle';
+                o.frequency.value = i % 2 ? 1040 : 1385;
+                g.gain.setValueAtTime(0.30, bt);
+                g.gain.exponentialRampToValueAtTime(0.0001, bt + 0.08);
+                o.connect(g).connect(muffle);
+                o.start(bt); o.stop(bt + 0.09);
+              }
+            } else {
+              const o = ctx.createOscillator(); const g = ctx.createGain();
+              o.type = 'square'; o.frequency.value = 1320;
+              g.gain.setValueAtTime(0.0001, when);
+              g.gain.linearRampToValueAtTime(0.22, when + 0.01);
+              g.gain.setValueAtTime(0.22, when + 0.34);
+              g.gain.exponentialRampToValueAtTime(0.0001, when + 0.38);
+              o.connect(g).connect(muffle);
+              o.start(when); o.stop(when + 0.4);
+            }
+          };
+          /* Scheduled ahead in a rolling window, like the rain, so the
+             cadence is sample-accurate rather than at the mercy of a frame. */
+          const schedule = () => {
+            if (!this.loops.has(name)) return;
+            const until = ctx.currentTime + 2.5;
+            while (handle._nextRing < until) {
+              strike(Math.max(ctx.currentTime, handle._nextRing));
+              handle._nextRing += 2.0;               // ring, pause, ring
+            }
+            handle._timer = setTimeout(schedule, 1200);
+          };
+          afterHandle = () => {
+            handle._nextRing = ctx.currentTime + 0.05;
+            handle._muffle = muffle;
+            schedule();
+          };
+          stops.push(() => clearTimeout(handle._timer));
+          break;
+        }
         return null;
     }
 
@@ -1043,6 +1210,14 @@ export class AudioEngine {
       _density: 1,
       _gustLevel: 1,
       _preroll: 0,
+      _nextRing: 0,
+      _muffle: null,
+      /** 0 = in the room with you, 1 = through two walls and a corridor. */
+      setMuffle: (k, ramp = 0.2) => {
+        if (!handle._muffle) return;
+        const hz = 5200 - Math.min(1, Math.max(0, k)) * 4500;
+        handle._muffle.frequency.setTargetAtTime(hz, ctx.currentTime, ramp);
+      },
       setVolume: (v, ramp = 0.2) => {
         out.gain.setTargetAtTime(v, ctx.currentTime, ramp);
       },
@@ -1061,6 +1236,12 @@ export class AudioEngine {
   }
 
   stopLoop(name, fade) { const h = this.loops.get(name); if (h) h.stop(fade); }
+  /** Ride a running loop's level -- the storm easing before 0417. */
+  setLoopVolume(name, v, ramp = 1.0) {
+    const h = this.loops.get(name);
+    if (h && h.setVolume) h.setVolume(v, ramp);
+    return !!h;
+  }
   isLooping(name) { return this.loops.has(name); }
 
   /** Cut every voice chain in flight. Used when a shift ends or resets. */

@@ -71,14 +71,20 @@ export function fileCabinet(mats, labels = ['A - F', 'G - L', 'M - R', 'S - Z'])
   for (let i = 0; i < n; i++) {
     const y = 0.14 + i * ((H - 0.18) / n);
     const dh = (H - 0.18) / n - 0.014;
+    /* Each drawer is its own group so that something can pull one out. A
+       drawer standing open in a room the player left closed is one of the
+       better things in this game; it needs a handle in the scene graph. */
+    const drawer = new THREE.Group();
+    drawer.name = `drawer${i}`;
     // drawer face, recessed slightly so the gap catches a shadow
-    g.add(box(W - 0.02, dh, 0.016, steel, { pos: [0, y + dh / 2, D / 2 + 0.004] }));
+    drawer.add(box(W - 0.02, dh, 0.016, steel, { pos: [0, y + dh / 2, D / 2 + 0.004] }));
     // pull
-    g.add(box(0.15, 0.030, 0.030, mats.get('chrome'), { pos: [0, y + dh - 0.06, D / 2 + 0.022] }));
+    drawer.add(box(0.15, 0.030, 0.030, mats.get('chrome'), { pos: [0, y + dh - 0.06, D / 2 + 0.022] }));
     // label card in its holder
     const card = new THREE.Mesh(new THREE.PlaneGeometry(0.115, 0.022), paperMat(drawerLabel(labels[i])));
     card.position.set(0, y + dh - 0.14, D / 2 + 0.014);
-    g.add(card);
+    drawer.add(card);
+    g.add(drawer);
   }
   return g;
 }

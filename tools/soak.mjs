@@ -110,9 +110,9 @@ for (const r of results) {
   byCall[r.id].visited.add(r.visited);
 }
 
-console.log('call'.padEnd(16) + 'runs'.padEnd(7) + 'stalled'.padEnd(9) + 'gates'.padEnd(7) + 'nodes');
+console.log('call'.padEnd(24) + 'runs'.padEnd(7) + 'stalled'.padEnd(9) + 'gates'.padEnd(7) + 'nodes');
 for (const [id, d] of Object.entries(byCall)) {
-  console.log(id.padEnd(16) + String(d.ok + d.stalled).padEnd(7) + String(d.stalled).padEnd(9)
+  console.log(id.padEnd(24) + String(d.ok + d.stalled).padEnd(7) + String(d.stalled).padEnd(9)
     + String(d.gates).padEnd(7) + `${Math.max(...d.visited)}/${d.total}`);
 }
 

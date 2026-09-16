@@ -13,6 +13,8 @@
     "check:controls": "node tools/controls.mjs",
     "check:render": "node tools/render.mjs",
     "check:pad": "node tools/pad.mjs",
+    "check:night": "node tools/fullnight.mjs",
+    "check:pacing": "node tools/pacing.mjs",
     "check:perf": "node tools/perf.mjs",
     "app": "electron .",
     "dist": "electron-builder --publish never",
